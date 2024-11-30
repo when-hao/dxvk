@@ -1,6 +1,6 @@
 name: Test Builds on Windows
 
-on: [push, pull_request, workflow_dispatch]
+on: [push]
 
 jobs:
   build-set-windows:
@@ -22,16 +22,16 @@ jobs:
 
     - name: Setup Meson
       shell: pwsh
-      run: pip install meson
+      run: pip install meson ninja
 
     - name: Find Visual Studio
       shell: pwsh
       run: |
-        $installationPath = Get-VSSetupInstance `
-          | Select-VSSetupInstance -Require Microsoft.VisualStudio.Workload.NativeDesktop -Latest `
-          | Select-Object -ExpandProperty InstallationPath
-        Write-Output "VSDEVCMD=${installationPath}\Common7\Tools\VsDevCmd.bat" `
-          | Out-File -FilePath "${Env:GITHUB_ENV}" -Append
+        #$installationPath = Get-VSSetupInstance `
+          #| Select-VSSetupInstance -Require Microsoft.VisualStudio.Workload.NativeDesktop -Latest `
+         # | Select-Object -ExpandProperty InstallationPath
+        #Write-Output "VSDEVCMD=${installationPath}\Common7\Tools\VsDevCmd.bat" `
+       #   | Out-File -FilePath "${Env:GITHUB_ENV}" -Append
 
     - name: Download D3D8 SDK Headers
       shell: pwsh
@@ -45,15 +45,17 @@ jobs:
       shell: bash
       run: |
         echo "VERSION_NAME=${GITHUB_REF##*/}-${GITHUB_SHA##*/}" >> $GITHUB_ENV
+        clang --help 2>&1
+        cl.exe --help 2>&1
 
-    - name: Build MSVC x86
-      shell: pwsh
-      run: |
-        & "${Env:COMSPEC}" /s /c "`"${Env:VSDEVCMD}`" -arch=x86 -host_arch=x64 -no_logo && set" `
-          | % { , ($_ -Split '=', 2) } `
-          | % { [System.Environment]::SetEnvironmentVariable($_[0], $_[1]) }
-        meson --buildtype release --backend vs2022 build-msvc-x86
-        msbuild -m build-msvc-x86/dxvk.sln
+#    - name: Build MSVC x86
+ #     shell: pwsh
+  #    run: |
+   #     & "${Env:COMSPEC}" /s /c "`"${Env:VSDEVCMD}`" -arch=x86 -host_arch=x64 -no_logo && set" `
+    #      | % { , ($_ -Split '=', 2) } `
+     #     | % { [System.Environment]::SetEnvironmentVariable($_[0], $_[1]) }
+      #  meson --buildtype release --backend vs2022 build-msvc-x86
+       # msbuild -m build-msvc-x86/dxvk.sln
 
     - name: Build MSVC x64
       shell: pwsh
@@ -61,21 +63,20 @@ jobs:
         & "${Env:COMSPEC}" /s /c "`"${Env:VSDEVCMD}`" -arch=x64 -host_arch=x64 -no_logo && set" `
           | % { , ($_ -Split '=', 2) } `
           | % { [System.Environment]::SetEnvironmentVariable($_[0], $_[1]) }
-        meson --buildtype release --backend vs2022 build-msvc-x64
-        msbuild -m build-msvc-x64/dxvk.sln
+        meson --buildtype release --backend clang build-msvc-x64
+        ls build-msvc-x64
+       # msbuild -m build-msvc-x64/dxvk.sln
+        
 
     - name: Prepare artifacts
       shell: pwsh
       run: |
-        mkdir artifacts\x32
-        ls -Path build-msvc-x86\src -Include *.dll,*.pdb -Recurse
-          | cp -Destination (Join-Path -Path (pwd) -ChildPath artifacts\x32)
-        mkdir artifacts\x64
-        ls -Path build-msvc-x64\src -Include *.dll,*.pdb -Recurse
-          | cp -Destination (Join-Path -Path (pwd) -ChildPath artifacts\x64)
+        #mkdir artifacts\x64
+        #ls -Path build-msvc-x64\src -Include *.dll,*.pdb -Recurse
+         # | cp -Destination (Join-Path -Path (pwd) -ChildPath artifacts\x64)
 
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: dxvk-${{ env.VERSION_NAME }}-msvc-output
-        path: artifacts\*
+    #- name: Upload artifacts
+      #uses: actions/upload-artifact@v4
+      #with:
+        #name: dxvk-${{ env.VERSION_NAME }}-msvc-output
+        #path: artifacts\*
