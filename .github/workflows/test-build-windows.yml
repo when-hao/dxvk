@@ -1,6 +1,6 @@
 name: Test Builds on Windows
 
-on: [push]
+on: pull_request
 
 jobs:
   build-set-windows:
@@ -45,8 +45,7 @@ jobs:
       shell: bash
       run: |
         echo "VERSION_NAME=${GITHUB_REF##*/}-${GITHUB_SHA##*/}" >> $GITHUB_ENV
-        clang --help 2>&1
-        cl.exe --help 2>&1
+      
 
 #    - name: Build MSVC x86
  #     shell: pwsh
