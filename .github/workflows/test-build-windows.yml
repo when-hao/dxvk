@@ -1,6 +1,6 @@
 name: Test Builds on Windows
 
-on: pull_request
+on: push
 
 jobs:
   build-set-windows:
@@ -27,11 +27,11 @@ jobs:
     - name: Find Visual Studio
       shell: pwsh
       run: |
-        #$installationPath = Get-VSSetupInstance `
-          #| Select-VSSetupInstance -Require Microsoft.VisualStudio.Workload.NativeDesktop -Latest `
-         # | Select-Object -ExpandProperty InstallationPath
-        #Write-Output "VSDEVCMD=${installationPath}\Common7\Tools\VsDevCmd.bat" `
-       #   | Out-File -FilePath "${Env:GITHUB_ENV}" -Append
+        $installationPath = Get-VSSetupInstance `
+          | Select-VSSetupInstance -Require Microsoft.VisualStudio.Workload.NativeDesktop -Latest `
+          | Select-Object -ExpandProperty InstallationPath
+        Write-Output "VSDEVCMD=${installationPath}\Common7\Tools\VsDevCmd.bat" `
+          | Out-File -FilePath "${Env:GITHUB_ENV}" -Append
 
     - name: Download D3D8 SDK Headers
       shell: pwsh
@@ -62,9 +62,15 @@ jobs:
         & "${Env:COMSPEC}" /s /c "`"${Env:VSDEVCMD}`" -arch=x64 -host_arch=x64 -no_logo && set" `
           | % { , ($_ -Split '=', 2) } `
           | % { [System.Environment]::SetEnvironmentVariable($_[0], $_[1]) }
-        meson --buildtype release --backend clang build-msvc-x64
+        meson --buildtype release -Db_pgo=generate \
+        -Dc_args="-finline-functions -fomit-frame-pointer -fno-stack-protector -fno-math-errno -fno-trapping-math -fno-common -fgraphite-identity -floop-nest-optimize -ftree-loop-distribution -fno-semantic-interposition -fipa-pta -fno-plt" \
+        -Dc_link_args="-flto=full -s -fdata-sections -ffunction-sections -Wl,--gc-sections -fprofile-arcs -ftest-coverage" \
+        -Dcpp_args="-finline-functions -fomit-frame-pointer -fno-stack-protector -fno-math-errno -fno-trapping-math -fno-common -fgraphite-identity -floop-nest-optimize -ftree-loop-distribution -fno-semantic-interposition -fipa-pta -fno-plt" \
+        -Dcpp_link_args="-flto=full -s -fdata-sections -ffunction-sections -Wl,--gc-sections" \
+        -Db_ndebug=if-release --backend=vs2022\
+         build-msvc-x64
         ls build-msvc-x64
-       # msbuild -m build-msvc-x64/dxvk.sln
+        msbuild -m build-msvc-x64/dxvk.sln
         
 
     - name: Prepare artifacts
