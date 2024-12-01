@@ -76,9 +76,9 @@ function build_arch {
         -Db_lto=true \
         -Db_pgo=generate \
         -Dc_args="-fprofile-arcs -ftest-coverage" \
-        -Dc_link_args=" -fprofile-arcs -ftest-coverage" \
+        -Dc_link_args=" -fprofile-arcs -ftest-coverage -lgcov" \
         -Dcpp_args="-fprofile-arcs -ftest-coverage" \
-        -Dcpp_link_args="-fprofile-arcs -ftest-coverage" \
+        -Dcpp_link_args="-fprofile-arcs -ftest-coverage -lgcov" \
         -Db_ndebug=if-release                               \
         -Dbuild_id=$opt_buildid                             \
         "$DXVK_BUILD_DIR/build.$1"
