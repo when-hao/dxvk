@@ -1,6 +1,6 @@
 name: Test Builds on Windows
 
-on: push
+on: fork
 
 jobs:
   build-set-windows:
