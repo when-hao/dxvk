@@ -1,6 +1,6 @@
 name: Artifacts (Package)
 
-on: pull_request
+on: push
 
 jobs:
   artifacts-mingw-w64:
@@ -17,18 +17,11 @@ jobs:
     - name: Setup problem matcher
       uses: Joshua-Ashton/gcc-problem-matcher@v3
 
-    - name : r shell
-      run: |
-           apt update
-           apt search llvm-mingw
-
     - name: Build release
       id: build-release
       uses: Joshua-Ashton/arch-mingw-github-action@v8
       with:
         command: |
-          pacman -Ss mingw
-          x86_64-w64-mingw32-gcov --help
           export VERSION_NAME="${GITHUB_REF##*/}-${GITHUB_SHA##*/}"
           ./package-release.sh ${VERSION_NAME} build --no-package --64-only
           echo "VERSION_NAME=${VERSION_NAME}" >> $GITHUB_ENV
