@@ -65,8 +65,8 @@ function build_arch {
   if [ $opt_devbuild -eq 0 ]; then
     opt_strip=--strip
   fi
-  ls -l
-  ls -l $HOME
+  
+  
   meson setup --cross-file "$DXVK_SRC_DIR/$crossfile$1.txt" \
         --buildtype "release"                               \
         --prefix "$DXVK_BUILD_DIR"                          \
@@ -75,10 +75,10 @@ function build_arch {
         --libdir "x$1"                                      \
         -Db_lto=true \
         -Db_pgo=generate \
-        -Dc_args="-finline-functions -fomit-frame-pointer -fno-stack-protector -fno-math-errno -fno-trapping-math -fno-common -fgraphite-identity -floop-nest-optimize -ftree-loop-distribution -fno-semantic-interposition -fipa-pta -fno-plt -fprofile-arcs -ftest-coverage" \
-        -Dc_link_args="-flto=full -s -fdata-sections -ffunction-sections -Wl,--gc-sections -fprofile-arcs -ftest-coverage" \
-        -Dcpp_args="-finline-functions -fomit-frame-pointer -fno-stack-protector -fno-math-errno -fno-trapping-math -fno-common -fgraphite-identity -floop-nest-optimize -ftree-loop-distribution -fno-semantic-interposition -fipa-pta -fno-plt -fprofile-arcs -ftest-coverage" \
-        -Dcpp_link_args="-flto=full -s -fdata-sections -ffunction-sections -Wl,--gc-sections -fprofile-arcs -ftest-coverage" \
+        -Dc_args="-fprofile-arcs -ftest-coverage" \
+        -Dc_link_args=" -fprofile-arcs -ftest-coverage" \
+        -Dcpp_args="-fprofile-arcs -ftest-coverage" \
+        -Dcpp_link_args="-fprofile-arcs -ftest-coverage" \
         -Db_ndebug=if-release                               \
         -Dbuild_id=$opt_buildid                             \
         "$DXVK_BUILD_DIR/build.$1"
