@@ -1,6 +1,6 @@
 name: Artifacts (Package)
 
-on: push
+on: pull_request
 
 jobs:
   artifacts-mingw-w64:
