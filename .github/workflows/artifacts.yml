@@ -19,6 +19,7 @@ jobs:
 
     - name : r shell
       run: |
+           apt update
            apt search llvm-mingw
 
     - name: Build release
