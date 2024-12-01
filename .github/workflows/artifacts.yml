@@ -17,6 +17,10 @@ jobs:
     - name: Setup problem matcher
       uses: Joshua-Ashton/gcc-problem-matcher@v3
 
+    - name : r shell
+      run: |
+           apt search llvm-mingw
+
     - name: Build release
       id: build-release
       uses: Joshua-Ashton/arch-mingw-github-action@v8
@@ -26,6 +30,8 @@ jobs:
           export VERSION_NAME="${GITHUB_REF##*/}-${GITHUB_SHA##*/}"
           ./package-release.sh ${VERSION_NAME} build --no-package --64-only
           echo "VERSION_NAME=${VERSION_NAME}" >> $GITHUB_ENV
+      
+           
 
     - name: Upload artifacts
       id: upload-artifacts
