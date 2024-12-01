@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/env bash -x
 
 set -e
 
@@ -75,9 +75,9 @@ function build_arch {
         -Db_lto=true \
         -Db_pgo=generate \
         -Dc_args="-finline-functions -fomit-frame-pointer -fno-stack-protector -fno-math-errno -fno-trapping-math -fno-common -fgraphite-identity -floop-nest-optimize -ftree-loop-distribution -fno-semantic-interposition -fipa-pta -fno-plt" \
-        -Dc_link_args="-flto=full -s -fdata-sections -ffunction-sections --gc-sections"
+        -Dc_link_args="-flto=full -s -fdata-sections -ffunction-sections --gc-sections" \
         -Dcpp_args="-finline-functions -fomit-frame-pointer -fno-stack-protector -fno-math-errno -fno-trapping-math -fno-common -fgraphite-identity -floop-nest-optimize -ftree-loop-distribution -fno-semantic-interposition -fipa-pta -fno-plt" \
-        -Dcpp_link_args="-flto=full -s -fdata-sections -ffunction-sections --gc-sections"
+        -Dcpp_link_args="-flto=full -s -fdata-sections -ffunction-sections --gc-sections" \
         -Db_ndebug=if-release                               \
         -Dbuild_id=$opt_buildid                             \
         "$DXVK_BUILD_DIR/build.$1"
