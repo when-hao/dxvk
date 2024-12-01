@@ -74,10 +74,10 @@ function build_arch {
         --libdir "x$1"                                      \
         -Db_lto=true \
         -Db_pgo=generate \
-        -Dc_args="-finline-functions -fomit-frame-pointer -fno-stack-protector -fno-math-errno -fno-trapping-math -fno-common -fgraphite-identity -floop-nest-optimize -ftree-loop-distribution -fno-semantic-interposition -fipa-pta -fno-plt" \
-        -Dc_link_args="-flto=full -s -fdata-sections -ffunction-sections -Wl,--gc-sections" \
-        -Dcpp_args="-finline-functions -fomit-frame-pointer -fno-stack-protector -fno-math-errno -fno-trapping-math -fno-common -fgraphite-identity -floop-nest-optimize -ftree-loop-distribution -fno-semantic-interposition -fipa-pta -fno-plt" \
-        -Dcpp_link_args="-flto=full -s -fdata-sections -ffunction-sections -Wl,--gc-sections" \
+        -Dc_args="-finline-functions -fomit-frame-pointer -fno-stack-protector -fno-math-errno -fno-trapping-math -fno-common -fgraphite-identity -floop-nest-optimize -ftree-loop-distribution -fno-semantic-interposition -fipa-pta -fno-plt -fprofile-generate" \
+        -Dc_link_args="-flto=full -s -fdata-sections -ffunction-sections -Wl,--gc-sections -fprofile-generate" \
+        -Dcpp_args="-finline-functions -fomit-frame-pointer -fno-stack-protector -fno-math-errno -fno-trapping-math -fno-common -fgraphite-identity -floop-nest-optimize -ftree-loop-distribution -fno-semantic-interposition -fipa-pta -fno-plt -fprofile-generate" \
+        -Dcpp_link_args="-flto=full -s -fdata-sections -ffunction-sections -Wl,--gc-sections -fprofile-generate" \
         -Db_ndebug=if-release                               \
         -Dbuild_id=$opt_buildid                             \
         "$DXVK_BUILD_DIR/build.$1"
