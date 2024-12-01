@@ -27,6 +27,7 @@ jobs:
       with:
         command: |
           pacman -Ss mingw
+          x86_64-w64-mingw32-gcov --help
           export VERSION_NAME="${GITHUB_REF##*/}-${GITHUB_SHA##*/}"
           ./package-release.sh ${VERSION_NAME} build --no-package --64-only
           echo "VERSION_NAME=${VERSION_NAME}" >> $GITHUB_ENV
