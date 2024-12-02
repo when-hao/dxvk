@@ -68,6 +68,7 @@ jobs:
     - name: r
       shell: bash
       run: |
+           grep -r -i --color sanity
            cd build-msvc-x64
            grep -r -i --color sanity
 
