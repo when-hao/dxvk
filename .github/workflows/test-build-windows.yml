@@ -62,9 +62,6 @@ jobs:
         & "${Env:COMSPEC}" /s /c "`"${Env:VSDEVCMD}`" -arch=x64 -host_arch=x64 -no_logo && set" `
           | % { , ($_ -Split '=', 2) } `
           | % { [System.Environment]::SetEnvironmentVariable($_[0], $_[1]) }
-        $env:CC="clang"
-        $env:CXX="clang++" 
-        $env:USE="-ssp" 
         meson setup --buildtype release -Db_pgo=generate -Dc_args="/Ot /GL /GS- /EHa- /fp:fast" -Dc_link_args="/CETCOMPAT:NO /CLRSUPPORTLASTERROR:NO /DYNAMICBASE:NO /GENPROFILE" -Dcpp_args="/Ot /GL /GS- /EHa- /fp:fast" -Dcpp_link_args="/CETCOMPAT:NO /CLRSUPPORTLASTERROR:NO /DYNAMICBASE:NO /GENPROFILE" -Db_ndebug=if-release --backend vs2022 build-msvc-x64
         ls build-msvc-x64
         msbuild -m build-msvc-x64/dxvk.sln
