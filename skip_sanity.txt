@@ -1,2 +1,9 @@
 [properties]
 skip_sanity_check = true
+needs_exe_wrapper = true
+
+[host_machine]
+system = 'windows'
+cpu_family = 'x86_64'
+cpu = 'x86_64'
+endian = 'little'
