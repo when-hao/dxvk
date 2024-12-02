@@ -63,9 +63,13 @@ jobs:
           | % { , ($_ -Split '=', 2) } `
           | % { [System.Environment]::SetEnvironmentVariable($_[0], $_[1]) }
         meson --buildtype release --strip -Dc_args="/Ot /GL /GS- /fp:fast /EHs- /EHc-" -Dc_link_args="/CETCOMPAT:NO /DYNAMICBASE:NO" -Dcpp_args="/Ot /GL /GS- /EHs- /EHc- /fp:fast" -Dcpp_link_args="/CETCOMPAT:NO /DYNAMICBASE:NO /CLRSUPPORTLASTERROR:NO" -Db_lto=true -Db_ndebug=if-release --backend vs2022 build-msvc-x64
-        ls build-msvc-x64
         msbuild -m build-msvc-x64/dxvk.sln
-        
+    
+    - name: r
+      shell: bash
+      run: |
+           ls 
+           ls build-msvc-x64
 
     - name: Prepare artifacts
       shell: pwsh
