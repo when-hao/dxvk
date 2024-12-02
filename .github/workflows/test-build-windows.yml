@@ -1,6 +1,6 @@
 name: Test Builds on Windows
 
-on: fork
+on: push
 
 jobs:
   build-set-windows:
@@ -65,20 +65,20 @@ jobs:
         $env:CC="clang"
         $env:CXX="clang++" 
         $env:USE="-ssp" 
-        meson setup --buildtype release -Db_pgo=generate -Dc_args="-finline-functions -fomit-frame-pointer -fno-stack-protector -fno-math-errno -fno-trapping-math -fno-common -fno-semantic-interposition -fno-plt" -Dc_link_args="-flto=full -s -fdata-sections -ffunction-sections -Wl,--gc-sections" -Dcpp_args="-finline-functions -fomit-frame-pointer -fno-stack-protector -fno-math-errno -fno-trapping-math -fno-common  -fno-semantic-interposition -fno-plt" -Dcpp_link_args="-flto=full -s -fdata-sections -ffunction-sections -Wl,--gc-sections" -Db_ndebug=if-release --backend vs2022 build-clang-x64
-        ls build-clang-x64
-        msbuild -m build-clang-x64/dxvk.sln
+        meson setup --buildtype release -Db_pgo=generate -Dc_args="/Ot /GL /GS- /EHa- /fp:fast" -Dc_link_args="/CETCOMPAT:NO /CLRSUPPORTLASTERROR:NO /DYNAMICBASE:NO /GENPROFILE" -Dcpp_args="/Ot /GL /GS- /EHa- /fp:fast" -Dcpp_link_args="/CETCOMPAT:NO /CLRSUPPORTLASTERROR:NO /DYNAMICBASE:NO /GENPROFILE" -Db_ndebug=if-release --backend vs2022 build-msvc-x64
+        ls build-msvc-x64
+        msbuild -m build-msvc-x64/dxvk.sln
         
 
     - name: Prepare artifacts
       shell: pwsh
       run: |
-        #mkdir artifacts\x64
-        #ls -Path build-msvc-x64\src -Include *.dll,*.pdb -Recurse
-         # | cp -Destination (Join-Path -Path (pwd) -ChildPath artifacts\x64)
+        mkdir artifacts\x64
+        ls -Path build-msvc-x64\src -Include *.dll,*.pdb -Recurse
+          | cp -Destination (Join-Path -Path (pwd) -ChildPath artifacts\x64)
 
-    #- name: Upload artifacts
-      #uses: actions/upload-artifact@v4
-      #with:
-        #name: dxvk-${{ env.VERSION_NAME }}-msvc-output
-        #path: artifacts\*
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: dxvk-${{ env.VERSION_NAME }}-msvc-output
+        path: artifacts\*
