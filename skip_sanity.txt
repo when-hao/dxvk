@@ -1,3 +1,7 @@
+[binaries]
+c = 'cl'
+cpp = 'cl'
+
 [properties]
 skip_sanity_check = true
 needs_exe_wrapper = true
