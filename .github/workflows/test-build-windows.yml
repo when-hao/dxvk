@@ -62,7 +62,7 @@ jobs:
         & "${Env:COMSPEC}" /s /c "`"${Env:VSDEVCMD}`" -arch=x64 -host_arch=x64 -no_logo && set" `
           | % { , ($_ -Split '=', 2) } `
           | % { [System.Environment]::SetEnvironmentVariable($_[0], $_[1]) }
-        meson --buildtype release --strip -Dc_args="/Ot /GL /GS- /fp:fast /EHs- /EHc-" -Dc_link_args="/CETCOMPAT:NO /DYNAMICBASE:NO" -Dcpp_args="/Ot /GL /GS- /EHs- /EHc- /fp:fast" -Dcpp_link_args="/CETCOMPAT:NO /DYNAMICBASE:NO /CLRSUPPORTLASTERROR:NO" -Db_lto=true -Db_ndebug=if-release --backend vs2022 build-msvc-x64
+        meson --buildtype release --strip -Db_sanitize=none -Dc_args="/Ot /GL /GS- /fp:fast /EHs- /EHc-" -Dc_link_args="/CETCOMPAT:NO /DYNAMICBASE:NO" -Dcpp_args="/Ot /GL /GS- /EHs- /EHc- /fp:fast" -Dcpp_link_args="/CETCOMPAT:NO /DYNAMICBASE:NO /CLRSUPPORTLASTERROR:NO" -Db_lto=true -Db_ndebug=if-release --backend vs2022 build-msvc-x64
         #msbuild -m build-msvc-x64/dxvk.sln
     
     - name: r
