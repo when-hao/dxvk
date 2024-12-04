@@ -75,9 +75,9 @@ function build_arch {
         --libdir "x$1" \
         -Db_pgo=off \
         -Db_sanitize=none \
-        -Dc_args="-finline-functions -fomit-frame-pointer -fno-stack-protector -fno-math-errno -fno-trapping-math -fno-common -fgraphite-identity -floop-nest-optimize -ftree-loop-distribution -fno-semantic-interposition -fipa-pta -fno-plt -fp-model fast" \
+        -Dc_args="-finline-functions -fomit-frame-pointer -fno-stack-protector -fno-math-errno -fno-trapping-math -fno-common -fgraphite-identity -floop-nest-optimize -ftree-loop-distribution -fno-semantic-interposition -fipa-pta -fno-plt -fp-model=fast=2" \
         -Dc_link_args="-flto=full -s -fdata-sections -ffunction-sections -Wl,--gc-sections" \
-        -Dcpp_args="-finline-functions -fomit-frame-pointer -fno-stack-protector -fno-math-errno -fno-trapping-math -fno-common -fgraphite-identity -floop-nest-optimize -ftree-loop-distribution -fno-semantic-interposition -fipa-pta -fno-plt -fp-model fast" \
+        -Dcpp_args="-finline-functions -fomit-frame-pointer -fno-stack-protector -fno-math-errno -fno-trapping-math -fno-common -fgraphite-identity -floop-nest-optimize -ftree-loop-distribution -fno-semantic-interposition -fipa-pta -fno-plt -fp-model=fast=2" \
         -Dcpp_link_args="-flto=full -s -fdata-sections -ffunction-sections -Wl,--gc-sections" \
         -Db_ndebug=if-release                               \
         -Dbuild_id=$opt_buildid                             \
