@@ -19,8 +19,11 @@ jobs:
 
     - name: shell
       run : |
-           sudo apt install clang meson glslang-dev glslang-tools git mingw-w64 wine libunwind-dev base bash build-essential sed git tar curl wget bash gzip sudo file gawk grep bzip2 systemd findutils diffutils coreutils procps util-linux libxcb-util1 libxcb1-dev libglfw3
-
+           sudo apt install clang meson glslang-dev glslang-tools git mingw-w64 wine libunwind-dev base bash build-essential sed git tar curl wget bash gzip sudo file gawk grep bzip2 systemd findutils diffutils coreutils procps util-linux libxcb-util1 libxcb1-dev libglfw3 mingw-w64-x86-64-dev mingw-w64-i686-dev
+    - name: search
+      run: |
+           sudo apt search mingw
+           sudo apt search msvc
     - name: Build release
       id: build-release
       #uses: Joshua-Ashton/arch-mingw-github-action@v8
