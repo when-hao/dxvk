@@ -17,12 +17,16 @@ jobs:
     - name: Setup problem matcher
       uses: Joshua-Ashton/gcc-problem-matcher@v3
 
+    - name: shell
+      run : |
+           apt install clang meson glslang git mingw-w64 wine libunwind base bash base-devel sed git tar curl wget bash gzip sudo file gawk grep bzip2 which pacman systemd findutils diffutils coreutils procps-ng util-linux xcb-util xcb-util-keysyms xcb-util-wm lib32-xcb-util lib32-xcb-util-keysyms glfw-x11
+
     - name: Build release
       id: build-release
       uses: Joshua-Ashton/arch-mingw-github-action@v8
       with:
         command: |
-          sh -x -c "which pacman;pacman -Sy;pacman -Ss mingw;pacman -Ss msvc;" 2>&1
+          #sh -x -c "which pacman;pacman -Sy;pacman -Ss mingw;pacman -Ss msvc;" 2>&1
           export VERSION_NAME="${GITHUB_REF##*/}-${GITHUB_SHA##*/}"
           ./package-release.sh ${VERSION_NAME} build --no-package --64-only
           echo "VERSION_NAME=${VERSION_NAME}" >> $GITHUB_ENV
