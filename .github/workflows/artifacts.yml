@@ -44,7 +44,7 @@ jobs:
           #sh -x -c "which pacman;pacman -Sy;pacman -Ss mingw;pacman -Ss msvc;" 2>&1
           #x86_64-w64-mingw32-clang
           export VERSION_NAME="${GITHUB_REF##*/}-${GITHUB_SHA##*/}"
-          sh -x ./package-release.sh ${VERSION_NAME} build --no-package --64-only
+          bash -x ./package-release.sh ${VERSION_NAME} build --no-package --64-only
           echo "VERSION_NAME=${VERSION_NAME}" >> $GITHUB_ENV
           
            
