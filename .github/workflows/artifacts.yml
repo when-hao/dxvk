@@ -26,7 +26,7 @@ jobs:
       #uses: Joshua-Ashton/arch-mingw-github-action@v8
       #with:
       #  command: |
-      run:
+      run: |
           #sh -x -c "which pacman;pacman -Sy;pacman -Ss mingw;pacman -Ss msvc;" 2>&1
           export VERSION_NAME="${GITHUB_REF##*/}-${GITHUB_SHA##*/}"
           ./package-release.sh ${VERSION_NAME} build --no-package --64-only
