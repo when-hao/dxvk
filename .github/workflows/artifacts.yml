@@ -19,7 +19,7 @@ jobs:
 
     - name: shell
       run : |
-           sudo apt install clang meson glslang git mingw-w64 wine libunwind base bash base-devel sed git tar curl wget bash gzip sudo file gawk grep bzip2 which pacman systemd findutils diffutils coreutils procps-ng util-linux xcb-util xcb-util-keysyms xcb-util-wm lib32-xcb-util lib32-xcb-util-keysyms glfw-x11
+           sudo apt install clang meson glslang-dev glslang-tools git mingw-w64 wine libunwind-dev base bash build-essential sed git tar curl wget bash gzip sudo file gawk grep bzip2 systemd findutils diffutils coreutils procps util-linux libxcb-util1 libxcb1-dev libglfw3
 
     - name: Build release
       id: build-release
