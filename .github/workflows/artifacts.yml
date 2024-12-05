@@ -28,10 +28,10 @@ jobs:
       #  command: |
       run: |
           #update-alternatives --config x86_64-w64-mingw64-g++
-          update-alternatives --remove x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-win64
-          update-alternatives --remove x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-win64
-          update-alternatives --remove i686-w64-mingw32-gcc /usr/bin/i686-w64-mingw32-g++-win64
-          update-alternatives --remove i686-w64-mingw32-g++ /usr/bin/i686-w64-mingw32-g++-win64
+          update-alternatives --remove x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-win32
+          update-alternatives --remove x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-win32
+          update-alternatives --remove i686-w64-mingw32-gcc /usr/bin/i686-w64-mingw32-g++-win32
+          update-alternatives --remove i686-w64-mingw32-g++ /usr/bin/i686-w64-mingw32-g++-win32
           #sh -x -c "which pacman;pacman -Sy;pacman -Ss mingw;pacman -Ss msvc;" 2>&1
           export VERSION_NAME="${GITHUB_REF##*/}-${GITHUB_SHA##*/}"
           ./package-release.sh ${VERSION_NAME} build --no-package --64-only
