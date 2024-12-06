@@ -29,9 +29,10 @@ jobs:
            #sudo apt update
            #sudo apt search mingw
            #sudo apt search msvc
-           apt-file update
-           apt-file search d3d8
-           apt-file search d3d11on12
+           sudo apt-file update
+           sudo apt-file search d3d8
+           sudo apt-file search d3d11on12
+           sudo apt-file search libgcov
     - name: Build release
       id: build-release
       #uses: Joshua-Ashton/arch-mingw-github-action@v8
