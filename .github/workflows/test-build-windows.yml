@@ -55,7 +55,7 @@ jobs:
      #     | % { [System.Environment]::SetEnvironmentVariable($_[0], $_[1]) }
       #  meson --buildtype release --native-file=./skip_sanity.txt --backend vs2022 build-msvc-x86
        # msbuild -m build-msvc-x86/dxvk.sln
-
+      # -Dc_args="/Ot /GL /GS- /fp:fast /EHs- /EHc-" -Dc_link_args="/CETCOMPAT:NO /DYNAMICBASE:NO /LTCG /GENPROFILE" -Dcpp_args="/Ot /GL /GS- /EHs- /EHc- /fp:fast" -Dcpp_link_args="/CETCOMPAT:NO /DYNAMICBASE:NO /CLRSUPPORTLASTERROR:NO /LTCG /GENPROFILE
     - name: Build MSVC x64
       shell: pwsh
       run: |
@@ -64,7 +64,7 @@ jobs:
           | % { [System.Environment]::SetEnvironmentVariable($_[0], $_[1]) }
         $ENV:CC="gcc"
         $ENV:CXX="g++"
-        meson --buildtype release --strip -Db_sanitize=none -Dc_args="/Ot /GL /GS- /fp:fast /EHs- /EHc-" -Dc_link_args="/CETCOMPAT:NO /DYNAMICBASE:NO /LTCG /GENPROFILE" -Dcpp_args="/Ot /GL /GS- /EHs- /EHc- /fp:fast" -Dcpp_link_args="/CETCOMPAT:NO /DYNAMICBASE:NO /CLRSUPPORTLASTERROR:NO /LTCG /GENPROFILE" -Db_lto=true -Db_ndebug=if-release build-msvc-x64
+        meson --buildtype release --strip -Db_sanitize=none   -Db_lto=true -Db_ndebug=if-release build-msvc-x64
         cd build-msvc-x64
         ninja 
         #msbuild -m build-msvc-x64/dxvk.sln
