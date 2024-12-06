@@ -20,7 +20,7 @@ jobs:
     - name: shell
       run : |
            sudo apt update
-           sudo apt install apt-file mingw-w64 mingw-w64-x86-64-dev mingw-w64-i686-dev mingw-w64-common libwine-dev libwine-development-dev wget clang meson glslang-dev glslang-tools git wine libunwind-dev base bash build-essential sed git tar curl wget bash gzip sudo file gawk grep bzip2 systemd findutils diffutils coreutils procps util-linux libxcb-util1 libxcb1-dev libglfw3
+           sudo apt install apt-file mingw-w64 mingw-w64-x86-64-dev mingw-w64-i686-dev mingw-w64-common libwine-dev wget clang meson glslang-dev glslang-tools git wine libunwind-dev base bash build-essential sed git tar curl wget bash gzip sudo file gawk grep bzip2 systemd findutils diffutils coreutils procps util-linux libxcb-util1 libxcb1-dev libglfw3
            #sudo apt --autoremove purge mingw*
     - name: search
       run: |
