@@ -20,27 +20,28 @@ jobs:
     - name: shell
       run : |
            sudo apt update
-           sudo apt install wget clang meson glslang-dev glslang-tools git wine libunwind-dev base bash build-essential sed git tar curl wget bash gzip sudo file gawk grep bzip2 systemd findutils diffutils coreutils procps util-linux libxcb-util1 libxcb1-dev libglfw3
-           sudo apt --autoremove purge mingw*
+           sudo apt install mingw-w64 mingw-w64-x86-64-dev mingw-w64-i686-dev mingw-w64-common wget clang meson glslang-dev glslang-tools git wine libunwind-dev base bash build-essential sed git tar curl wget bash gzip sudo file gawk grep bzip2 systemd findutils diffutils coreutils procps util-linux libxcb-util1 libxcb1-dev libglfw3
+           #sudo apt --autoremove purge mingw*
     - name: search
       run: |
-           wget https://github.com/mstorsjo/llvm-mingw/releases/download/20241203/llvm-mingw-20241203-ucrt-ubuntu-20.04-x86_64.tar.xz
-           tar xf llvm-mingw-20241203-ucrt-ubuntu-20.04-x86_64.tar.xz
+           #wget https://github.com/mstorsjo/llvm-mingw/releases/download/20241203/llvm-mingw-20241203-ucrt-ubuntu-20.04-x86_64.tar.xz
+           #tar xf llvm-mingw-20241203-ucrt-ubuntu-20.04-x86_64.tar.xz
            #sudo apt update
            #sudo apt search mingw
            #sudo apt search msvc
+           apt-file search d3d8
     - name: Build release
       id: build-release
       #uses: Joshua-Ashton/arch-mingw-github-action@v8
       #with:
       #  command: |
       run: |
-          #sudo update-alternatives --remove x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-win32
-          #sudo update-alternatives --remove x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-win32
-          #sudo update-alternatives --remove i686-w64-mingw32-gcc /usr/bin/i686-w64-mingw32-g++-win32
-          #sudo update-alternatives --remove i686-w64-mingw32-g++ /usr/bin/i686-w64-mingw32-g++-win32
-          export PATH="$PWD/llvm-mingw-20241203-ucrt-ubuntu-20.04-x86_64/bin:$PATH" LD_LIBRARY_PATH="$PWD/llvm-mingw-20241203-ucrt-ubuntu-20.04-x86_64/lib"
-          ls -l llvm-mingw-20241203-ucrt-ubuntu-20.04-x86_64/bin
+          sudo update-alternatives --remove x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-win32
+          sudo update-alternatives --remove x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-win32
+          sudo update-alternatives --remove i686-w64-mingw32-gcc /usr/bin/i686-w64-mingw32-g++-win32
+          sudo update-alternatives --remove i686-w64-mingw32-g++ /usr/bin/i686-w64-mingw32-g++-win32
+          #export PATH="$PWD/llvm-mingw-20241203-ucrt-ubuntu-20.04-x86_64/bin:$PATH" LD_LIBRARY_PATH="$PWD/llvm-mingw-20241203-ucrt-ubuntu-20.04-x86_64/lib"
+          #ls -l llvm-mingw-20241203-ucrt-ubuntu-20.04-x86_64/bin
           #sh -x -c "which pacman;pacman -Sy;pacman -Ss mingw;pacman -Ss msvc;" 2>&1
           #x86_64-w64-mingw32-clang
           export VERSION_NAME="${GITHUB_REF##*/}-${GITHUB_SHA##*/}"
