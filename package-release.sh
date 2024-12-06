@@ -79,9 +79,9 @@ function build_arch {
         --libdir "x$1" \
         -Db_pgo=off \
         -Db_sanitize=none \
-        -Dc_args="-fno-pic -fno-pie -finline-functions -fomit-frame-pointer -fno-stack-protector -fno-math-errno -fno-trapping-math -fno-common -fgraphite-identity -floop-nest-optimize -ftree-loop-distribution -fno-semantic-interposition -fipa-pta -fno-plt -ffast-math -ffp-contract=fast -freciprocal-math -ffinite-math-only" \
+        -Dc_args="-isystem /usr/include/wine/wine/windows/ -fno-pic -fno-pie -finline-functions -fomit-frame-pointer -fno-stack-protector -fno-math-errno -fno-trapping-math -fno-common -fgraphite-identity -floop-nest-optimize -ftree-loop-distribution -fno-semantic-interposition -fipa-pta -fno-plt -ffast-math -ffp-contract=fast -freciprocal-math -ffinite-math-only" \
         -Dc_link_args="-flto=full -s -fdata-sections -ffunction-sections -Wl,--gc-sections" \
-        -Dcpp_args="-std=c++17 -fno-pic -fno-pie -finline-functions -fomit-frame-pointer -fno-stack-protector -fno-math-errno -fno-trapping-math -fno-common -fgraphite-identity -floop-nest-optimize -ftree-loop-distribution -fno-semantic-interposition -fipa-pta -fno-plt -ffast-math -ffp-contract=fast -freciprocal-math -ffinite-math-only" \
+        -Dcpp_args="-isystem /usr/include/wine/wine/windows/ -fno-pic -fno-pie -finline-functions -fomit-frame-pointer -fno-stack-protector -fno-math-errno -fno-trapping-math -fno-common -fgraphite-identity -floop-nest-optimize -ftree-loop-distribution -fno-semantic-interposition -fipa-pta -fno-plt -ffast-math -ffp-contract=fast -freciprocal-math -ffinite-math-only" \
         -Dcpp_link_args="-flto=full -s -fdata-sections -ffunction-sections -Wl,--gc-sections" \
         -Db_ndebug=if-release                               \
         -Dbuild_id=$opt_buildid                             \
