@@ -33,6 +33,10 @@ jobs:
            #sudo apt-file search d3d8
            sudo apt-file search d3d11on12
            sudo apt-file search libgcov
+           #
+           #
+           #
+           sudo apt-file search bin/gcov
     - name: Build release
       id: build-release
       #uses: Joshua-Ashton/arch-mingw-github-action@v8
