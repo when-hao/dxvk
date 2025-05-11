@@ -71,7 +71,8 @@ function build_arch {
      #   -Dcpp_link_args="-flto=full -s -fdata-sections -ffunction-sections -Wl,--gc-sections" \
         
   
-  CC=llvm-mingw-20241203-msvcrt-ubuntu-20.04-x86_64/bin/x86_64-w64-mingw32-clang CXX=llvm-mingw-20241203-msvcrt-ubuntu-20.04-x86_64/bin/x86_64-w64-mingw32-clang++ meson setup --cross-file "$DXVK_SRC_DIR/$crossfile$1.txt" \
+  #CC=llvm-mingw-20241203-msvcrt-ubuntu-20.04-x86_64/bin/x86_64-w64-mingw32-clang CXX=llvm-mingw-20241203-msvcrt-ubuntu-20.04-x86_64/bin/x86_64-w64-mingw32-clang++ 
+  meson setup --cross-file "$DXVK_SRC_DIR/$crossfile$1.txt" \
         --buildtype "release"                               \
         --prefix "$DXVK_BUILD_DIR"                          \
         $opt_strip                                          \
