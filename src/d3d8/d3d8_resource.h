@@ -1,10 +1,10 @@
-#pragma once 
+#pragma once
 
 /** Implements IDirect3DResource8
-* 
+*
 * - SetPrivateData, GetPrivateData, FreePrivateData
 * - SetPriority, GetPriority
-* 
+*
 * - Subclasses provide: PreLoad, GetType
 */
 
@@ -12,14 +12,15 @@
 #include "../util/com/com_private_data.h"
 
 namespace dxvk {
-  
+
   template <typename D3D9, typename D3D8>
   class D3D8Resource : public D3D8DeviceChild<D3D9, D3D8> {
 
   public:
 
-    D3D8Resource(D3D8Device* pDevice, Com<D3D9>&& Object)
+    D3D8Resource(D3D8Device* pDevice, D3DPOOL Pool, Com<D3D9>&& Object)
       : D3D8DeviceChild<D3D9, D3D8>(pDevice, std::move(Object))
+      , m_pool                     ( Pool )
       , m_priority                 ( 0 ) { }
 
     HRESULT STDMETHODCALLTYPE SetPrivateData(
@@ -79,9 +80,14 @@ namespace dxvk {
     }
 
     DWORD STDMETHODCALLTYPE SetPriority(DWORD PriorityNew) {
-      DWORD oldPriority = m_priority;
-      m_priority = PriorityNew;
-      return oldPriority;
+      // Priority can only be set for D3DPOOL_MANAGED resources
+      if (likely(m_pool == D3DPOOL_MANAGED)) {
+        DWORD oldPriority = m_priority;
+        m_priority = PriorityNew;
+        return oldPriority;
+      }
+
+      return m_priority;
     }
 
     DWORD STDMETHODCALLTYPE GetPriority() {
@@ -90,22 +96,22 @@ namespace dxvk {
 
     virtual IUnknown* GetInterface(REFIID riid) override try {
       return D3D8DeviceChild<D3D9, D3D8>::GetInterface(riid);
-    } catch (HRESULT err) {
+    } catch (const DxvkError& e) {
       if (riid == __uuidof(IDirect3DResource8))
         return this;
-      
-      throw err;
+
+      throw e;
     }
 
   protected:
 
-    DWORD m_priority;
+    const D3DPOOL        m_pool;
+          DWORD          m_priority;
 
   private:
 
     ComPrivateData m_privateData;
 
   };
-
 
 }

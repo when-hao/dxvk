@@ -3,7 +3,97 @@
 #include "dxvk_include.h"
 
 namespace dxvk::util {
-  
+
+  /**
+   * \brief Debug utils label type
+   */
+  enum class DxvkDebugLabelType : uint32_t {
+    External,               ///< App-provided scope
+    InternalRenderPass,     ///< Internal render pass markers
+    InternalBarrierControl, ///< Barrier control markers
+  };
+
+  /**
+   * \brief Debug label wrapper
+   *
+   * Wrapper around a Vulkan debug label that
+   * persistently stores the string in question.
+   */
+  class DxvkDebugLabel {
+
+  public:
+
+    DxvkDebugLabel(const VkDebugUtilsLabelEXT& label, DxvkDebugLabelType type)
+    : m_text(label.pLabelName ? label.pLabelName : ""), m_type(type) {
+      for (uint32_t i = 0; i < m_color.size(); i++)
+        m_color[i] = label.color[i];
+    }
+
+    DxvkDebugLabelType type() const {
+      return m_type;
+    }
+
+    VkDebugUtilsLabelEXT get() const {
+      VkDebugUtilsLabelEXT label = { VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT };
+      label.pLabelName = m_text.c_str();
+      for (uint32_t i = 0; i < m_color.size(); i++)
+        label.color[i] = m_color[i];
+      return label;
+    }
+
+  private:
+
+    std::string           m_text;
+    std::array<float, 4>  m_color = { };
+    DxvkDebugLabelType    m_type;
+
+  };
+
+
+  /**
+   * \brief Built-in shader stage helper
+   *
+   * Useful when creating built-in pipelines.
+   */
+  class DxvkBuiltInShaderStages {
+
+  public:
+
+    uint32_t count() const {
+      return m_stageCount;
+    }
+
+    const VkPipelineShaderStageCreateInfo* infos() const {
+      return m_stages.data();
+    }
+
+    template<size_t N>
+    void addStage(VkShaderStageFlagBits stage, const uint32_t (&code)[N], const VkSpecializationInfo* specInfo) {
+      auto& moduleInfo = m_modules.at(m_stageCount);
+      moduleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+      moduleInfo.codeSize = sizeof(uint32_t) * N;
+      moduleInfo.pCode = &code[0];
+
+      auto& stageInfo = m_stages.at(m_stageCount);
+      stageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+      stageInfo.pNext = &moduleInfo;
+      stageInfo.stage = stage;
+      stageInfo.pName = "main";
+      stageInfo.pSpecializationInfo = specInfo;
+
+      m_stageCount += 1u;
+    }
+
+  private:
+
+    uint32_t m_stageCount = 0u;
+
+    std::array<VkShaderModuleCreateInfo, 3>         m_modules = { };
+    std::array<VkPipelineShaderStageCreateInfo, 3>  m_stages  = { };
+
+  };
+
+
   /**
    * \brief Gets pipeline stage flags for shader stages
    * 

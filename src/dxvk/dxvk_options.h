@@ -37,6 +37,16 @@ namespace dxvk {
     /// or FIFO_RELAXED (if false) present mode
     Tristate tearFree = Tristate::Auto;
 
+    /// Enables latency sleep
+    Tristate latencySleep = Tristate::Auto;
+
+    /// Latency tolerance, in microseconds
+    int32_t latencyTolerance = 0u;
+
+    /// Disable VK_NV_low_latency2. This extension
+    /// appears to be all sorts of broken on 32-bit.
+    Tristate disableNvLowLatency2 = Tristate::Auto;
+
     // Hides integrated GPUs if dedicated GPUs are
     // present. May be necessary for some games that
     // incorrectly assume monitor layouts.
@@ -44,6 +54,12 @@ namespace dxvk {
 
     /// Clears all mapped memory to zero.
     bool zeroMappedMemory = false;
+
+    /// Allows full-screen exclusive mode on Windows
+    bool allowFse = false;
+
+    /// Whether to enable tiler optimizations
+    Tristate tilerMode = Tristate::Auto;
 
     // Device name
     std::string deviceFilter;

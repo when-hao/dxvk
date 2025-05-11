@@ -7,12 +7,23 @@ namespace dxvk {
           D3D11Device*    pParent,
     const Rc<DxvkDevice>& Device,
           UINT            ContextFlags)
-  : D3D11CommonContext<D3D11DeferredContext>(pParent, Device, ContextFlags, GetCsChunkFlags(pParent)),
-    m_commandList (CreateCommandList()) {
+  : D3D11CommonContext<D3D11DeferredContext>(pParent, Device, ContextFlags, 0u),
+    m_commandList(CreateCommandList()),
+    m_destructionNotifier(this) {
     ResetContextState();
   }
   
   
+  HRESULT STDMETHODCALLTYPE D3D11DeferredContext::QueryInterface(REFIID riid, void** ppvObject) {
+    if (riid == __uuidof(ID3DDestructionNotifier)) {
+      *ppvObject = ref(&m_destructionNotifier);
+      return S_OK;
+    }
+
+    return D3D11CommonContext<D3D11DeferredContext>::QueryInterface(riid, ppvObject);
+  }
+
+
   HRESULT STDMETHODCALLTYPE D3D11DeferredContext::GetData(
           ID3D11Asynchronous*               pAsync,
           void*                             pData,
@@ -316,7 +327,7 @@ namespace dxvk {
         cStorage = std::move(storage)
       ] (DxvkContext* ctx) {
         ctx->invalidateImage(cImage, Rc<DxvkResourceAllocation>(cStorage));
-        ctx->initImage(cImage, cImage->getAvailableSubresources(), VK_IMAGE_LAYOUT_PREINITIALIZED);
+        ctx->initImage(cImage, VK_IMAGE_LAYOUT_PREINITIALIZED);
       });
 
       pMappedResource->RowPitch   = layout.RowPitch;
@@ -434,14 +445,6 @@ namespace dxvk {
           uint64_t                      Cookie,
     const D3D11_MAPPED_SUBRESOURCE&     MapInfo) {
     m_mappedResources.push_back({ Cookie, MapInfo });
-  }
-
-
-  DxvkCsChunkFlags D3D11DeferredContext::GetCsChunkFlags(
-          D3D11Device*                  pDevice) {
-    return pDevice->GetOptions()->dcSingleUseMode
-      ? DxvkCsChunkFlags(DxvkCsChunkFlag::SingleUse)
-      : DxvkCsChunkFlags();
   }
 
 }

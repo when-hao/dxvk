@@ -35,6 +35,9 @@ namespace dxvk {
 
     /// Buffer create flags
     VkBufferCreateFlags flags = 0;
+
+    /// Debug name.
+    const char* debugName = nullptr;
   };
 
 
@@ -341,6 +344,9 @@ namespace dxvk {
       m_storage = std::move(slice);
       m_bufferInfo = m_storage->getBufferInfo();
 
+      if (unlikely(m_info.debugName))
+        updateDebugName();
+
       // Implicitly invalidate views
       m_version += 1u;
       return result;
@@ -358,9 +364,9 @@ namespace dxvk {
      * \brief Retrieves resource ID for barrier tracking
      * \returns Unique resource ID
      */
-    uint64_t getResourceId() const {
+    bit::uint48_t getResourceId() const {
       constexpr static size_t Align = alignof(DxvkResourceAllocation);
-      return reinterpret_cast<uintptr_t>(m_storage.ptr()) / (Align & -Align);
+      return bit::uint48_t(reinterpret_cast<uintptr_t>(m_storage.ptr()) / (Align & -Align));
     }
 
     /**
@@ -406,6 +412,20 @@ namespace dxvk {
     Rc<DxvkResourceAllocation> relocateStorage(
             DxvkAllocationModes         mode);
 
+    /**
+     * \brief Sets debug name for the backing resource
+     * \param [in] name New debug name
+     */
+    void setDebugName(const char* name);
+
+    /**
+     * \brief Retrieves debug name
+     * \returns Debug name
+     */
+    const char* getDebugName() const {
+      return m_debugName.c_str();
+    }
+
   private:
 
     Rc<vk::DeviceFn>            m_vkd;
@@ -428,6 +448,12 @@ namespace dxvk {
     dxvk::mutex                 m_viewMutex;
     std::unordered_map<DxvkBufferViewKey,
       DxvkBufferView, DxvkHash, DxvkEq> m_views;
+
+    std::string                 m_debugName;
+
+    void updateDebugName();
+
+    std::string createDebugName(const char* name) const;
 
   };
 

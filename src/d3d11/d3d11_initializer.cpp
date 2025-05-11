@@ -77,6 +77,33 @@ namespace dxvk {
   }
 
 
+  void D3D11Initializer::InitShaderIcb(
+          D3D11CommonShader*          pShader,
+          size_t                      IcbSize,
+    const void*                       pIcbData) {
+    std::lock_guard<dxvk::mutex> lock(m_mutex);
+    m_transferCommands += 1;
+
+    auto icbSlice = pShader->GetIcb();
+    auto srcSlice = m_stagingBuffer.alloc(icbSlice.length());
+
+    std::memcpy(srcSlice.mapPtr(0), pIcbData, IcbSize);
+
+    if (IcbSize < icbSlice.length())
+      std::memset(srcSlice.mapPtr(IcbSize), 0, icbSlice.length() - IcbSize);
+
+    EmitCs([
+      cIcbSlice = std::move(icbSlice),
+      cSrcSlice = std::move(srcSlice)
+    ] (DxvkContext* ctx) {
+      ctx->copyBuffer(cIcbSlice.buffer(), cIcbSlice.offset(),
+        cSrcSlice.buffer(), cSrcSlice.offset(), cIcbSlice.length());
+    });
+
+    ThrottleAllocationLocked();
+  }
+
+
   void D3D11Initializer::InitDeviceLocalBuffer(
           D3D11Buffer*                pBuffer,
     const D3D11_SUBRESOURCE_DATA*     pInitialData) {
@@ -205,9 +232,7 @@ namespace dxvk {
         EmitCs([
           cImage = std::move(image)
         ] (DxvkContext* ctx) {
-          ctx->initImage(cImage,
-            cImage->getAvailableSubresources(),
-            VK_IMAGE_LAYOUT_UNDEFINED);
+          ctx->initImage(cImage, VK_IMAGE_LAYOUT_UNDEFINED);
         });
       }
 
@@ -278,9 +303,7 @@ namespace dxvk {
     EmitCs([
       cImage = std::move(image)
     ] (DxvkContext* ctx) {
-      ctx->initImage(cImage,
-        cImage->getAvailableSubresources(),
-        VK_IMAGE_LAYOUT_PREINITIALIZED);
+      ctx->initImage(cImage, VK_IMAGE_LAYOUT_PREINITIALIZED);
     });
 
     m_transferCommands += 1;
@@ -337,7 +360,7 @@ namespace dxvk {
       cSignalValue  = stats.allocatedTotal
     ] (DxvkContext* ctx) {
       ctx->signal(cSignal, cSignalValue);
-      ctx->flushCommandList(nullptr);
+      ctx->flushCommandList(nullptr, nullptr);
     });
 
     FlushCsChunk();
@@ -371,7 +394,7 @@ namespace dxvk {
 
 
   void D3D11Initializer::FlushCsChunkLocked() {
-    m_parent->GetContext()->InjectCsChunk(std::move(m_csChunk), false);
+    m_parent->GetContext()->InjectCsChunk(DxvkCsQueue::HighPriority, std::move(m_csChunk), false);
     m_csChunk = m_parent->AllocCsChunk(DxvkCsChunkFlag::SingleUse);
   }
 

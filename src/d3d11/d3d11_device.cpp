@@ -668,29 +668,29 @@ namespace dxvk {
     // works, provided the shader does not have any actual inputs
     if (!pInputElementDescs)
       return E_INVALIDARG;
-    
+
     try {
       DxbcReader dxbcReader(reinterpret_cast<const char*>(
         pShaderBytecodeWithInputSignature), BytecodeLength);
       DxbcModule dxbcModule(dxbcReader);
-      
+
       const Rc<DxbcIsgn> inputSignature = dxbcModule.isgn();
 
       uint32_t attrMask = 0;
       uint32_t bindMask = 0;
       uint32_t locationMask = 0;
       uint32_t bindingsDefined = 0;
-      
+
       std::array<DxvkVertexAttribute, D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT> attrList = { };
       std::array<DxvkVertexBinding,   D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT> bindList = { };
-      
+
       for (uint32_t i = 0; i < NumElements; i++) {
         const DxbcSgnEntry* entry = inputSignature->find(
           pInputElementDescs[i].SemanticName,
           pInputElementDescs[i].SemanticIndex, 0);
 
         // Create vertex input attribute description
-        DxvkVertexAttribute attrib;
+        DxvkVertexAttribute attrib = { };
         attrib.location = entry != nullptr ? entry->registerId : 0;
         attrib.binding  = pInputElementDescs[i].InputSlot;
         attrib.format   = LookupFormat(pInputElementDescs[i].Format, DXGI_VK_FORMAT_MODE_COLOR).Format;
@@ -714,17 +714,18 @@ namespace dxvk {
               break;
             }
           }
-        } else if (attrib.offset & (alignment - 1))
+        } else if (attrib.offset & (alignment - 1)) {
           return E_INVALIDARG;
+        }
 
         attrList.at(i) = attrib;
 
         // Create vertex input binding description. The
         // stride is dynamic state in D3D11 and will be
         // set by D3D11DeviceContext::IASetVertexBuffers.
-        DxvkVertexBinding binding;
+        DxvkVertexBinding binding = { };
         binding.binding   = pInputElementDescs[i].InputSlot;
-        binding.fetchRate = pInputElementDescs[i].InstanceDataStepRate;
+        binding.divisor   = pInputElementDescs[i].InstanceDataStepRate;
         binding.inputRate = pInputElementDescs[i].InputSlotClass == D3D11_INPUT_PER_INSTANCE_DATA
           ? VK_VERTEX_INPUT_RATE_INSTANCE : VK_VERTEX_INPUT_RATE_VERTEX;
         binding.extent    = entry ? uint32_t(attrib.offset + formatInfo->elementSize) : 0u;
@@ -2465,6 +2466,38 @@ namespace dxvk {
   }
 
 
+  bool D3D11Device::LockImage(
+    const Rc<DxvkImage>&            Image,
+          VkImageUsageFlags         Usage) {
+    bool feedback = false;
+
+    auto chunk = AllocCsChunk(DxvkCsChunkFlag::SingleUse);
+
+    chunk->push([
+      cImage  = Image,
+      cUsage  = Usage,
+      &feedback
+    ] (DxvkContext* ctx) {
+      DxvkImageUsageInfo usageInfo;
+      usageInfo.usage = cUsage;
+      usageInfo.stableGpuAddress = VK_TRUE;
+
+      feedback = ctx->ensureImageCompatibility(cImage, usageInfo);
+    });
+
+    m_context->InjectCsChunk(DxvkCsQueue::HighPriority, std::move(chunk), true);
+
+    if (!feedback) {
+      Logger::err(str::format("Failed to lock image:"
+        "\n  Image format:  ", Image->info().format,
+        "\n  Image usage:   ", std::hex, Image->info().usage,
+        "\n  Desired usage: ", std::hex, Usage));
+    }
+
+    return feedback;
+  }
+
+
 
   D3D11DeviceExt::D3D11DeviceExt(
           D3D11DXGIDevice*        pContainer,
@@ -2812,32 +2845,7 @@ namespace dxvk {
     if (!Image->canRelocate() && (Image->info().usage & Usage))
       return true;
 
-    bool feedback = false;
-
-    auto chunk = m_device->AllocCsChunk(DxvkCsChunkFlag::SingleUse);
-
-    chunk->push([
-      cImage  = Image,
-      cUsage  = Usage,
-      &feedback
-    ] (DxvkContext* ctx) {
-      DxvkImageUsageInfo usageInfo;
-      usageInfo.usage = cUsage;
-      usageInfo.stableGpuAddress = VK_TRUE;
-
-      feedback = ctx->ensureImageCompatibility(cImage, usageInfo);
-    });
-
-    m_device->GetContext()->InjectCsChunk(std::move(chunk), true);
-
-    if (!feedback) {
-      Logger::err(str::format("Failed to lock image:"
-        "\n  Image format:  ", Image->info().format,
-        "\n  Image usage:   ", std::hex, Image->info().usage,
-        "\n  Desired usage: ", std::hex, Usage));
-    }
-
-    return feedback;
+    return m_device->LockImage(Image, Usage);
   }
 
 
@@ -2852,7 +2860,7 @@ namespace dxvk {
       ctx->ensureBufferAddress(cBuffer);
     });
 
-    m_device->GetContext()->InjectCsChunk(std::move(chunk), true);
+    m_device->GetContext()->InjectCsChunk(DxvkCsQueue::HighPriority, std::move(chunk), true);
   }
 
 
@@ -3058,6 +3066,198 @@ namespace dxvk {
 
 
 
+  D3D11ReflexDevice::D3D11ReflexDevice(
+          D3D11DXGIDevice*        pContainer,
+          D3D11Device*            pDevice)
+  : m_container(pContainer), m_device(pDevice) {
+    auto dxvkDevice = pDevice->GetDXVKDevice();
+
+    m_reflexEnabled = dxvkDevice->features().nvLowLatency2
+                   && dxvkDevice->config().latencySleep == Tristate::Auto;
+  }
+
+
+  D3D11ReflexDevice::~D3D11ReflexDevice() {
+
+  }
+
+
+  ULONG STDMETHODCALLTYPE D3D11ReflexDevice::AddRef() {
+    return m_container->AddRef();
+  }
+
+
+  ULONG STDMETHODCALLTYPE D3D11ReflexDevice::Release() {
+    return m_container->Release();
+  }
+
+
+  HRESULT STDMETHODCALLTYPE D3D11ReflexDevice::QueryInterface(
+          REFIID                        riid,
+          void**                        ppvObject) {
+    return m_container->QueryInterface(riid, ppvObject);
+  }
+
+
+  BOOL STDMETHODCALLTYPE D3D11ReflexDevice::SupportsLowLatency() {
+    return m_reflexEnabled;
+  }
+
+
+  HRESULT STDMETHODCALLTYPE D3D11ReflexDevice::LatencySleep() {
+    if (!m_reflexEnabled)
+      return DXGI_ERROR_INVALID_CALL;
+
+    // Don't keep object locked while sleeping
+    Rc<DxvkReflexLatencyTrackerNv> tracker;
+
+    { std::lock_guard lock(m_mutex);
+      tracker = m_tracker;
+    }
+
+    if (tracker)
+      tracker->latencySleep();
+
+    return S_OK;
+  }
+
+
+  HRESULT STDMETHODCALLTYPE D3D11ReflexDevice::SetLatencySleepMode(
+          BOOL                          LowLatencyEnable,
+          BOOL                          LowLatencyBoost,
+          UINT32                        MinIntervalUs) {
+    if (!m_reflexEnabled)
+      return DXGI_ERROR_INVALID_CALL;
+
+    std::lock_guard lock(m_mutex);
+
+    if (m_tracker) {
+      m_tracker->setLatencySleepMode(
+        LowLatencyEnable, LowLatencyBoost, MinIntervalUs);
+    }
+
+    // Write back in case we have no swapchain yet
+    m_enableLowLatency = LowLatencyEnable;
+    m_enableBoost      = LowLatencyBoost;
+    m_minIntervalUs    = MinIntervalUs;
+    return S_OK;
+  }
+
+
+  HRESULT STDMETHODCALLTYPE D3D11ReflexDevice::SetLatencyMarker(
+          UINT64                        FrameId,
+          UINT32                        MarkerType) {
+    if (!m_reflexEnabled)
+      return DXGI_ERROR_INVALID_CALL;
+
+    std::lock_guard lock(m_mutex);
+
+    if (m_tracker) {
+      auto marker = VkLatencyMarkerNV(MarkerType);
+      m_tracker->setLatencyMarker(FrameId, marker);
+
+      if (marker == VK_LATENCY_MARKER_RENDERSUBMIT_START_NV) {
+        m_device->GetContext()->InjectCs(DxvkCsQueue::Ordered, [
+          cTracker  = m_tracker,
+          cFrameId  = FrameId
+        ] (DxvkContext* ctx) {
+          uint64_t frameId = cTracker->frameIdFromAppFrameId(cFrameId);
+
+          if (frameId)
+            ctx->beginLatencyTracking(cTracker, frameId);
+        });
+      } else if (marker == VK_LATENCY_MARKER_RENDERSUBMIT_END_NV) {
+        m_device->GetContext()->InjectCs(DxvkCsQueue::Ordered, [
+          cTracker  = m_tracker
+        ] (DxvkContext* ctx) {
+          ctx->endLatencyTracking(cTracker);
+        });
+      }
+    }
+
+    return S_OK;
+  }
+
+
+  HRESULT STDMETHODCALLTYPE D3D11ReflexDevice::GetLatencyInfo(
+          D3D_LOW_LATENCY_RESULTS*      pLowLatencyResults) {
+    constexpr static size_t FrameCount = 64;
+
+    if (!pLowLatencyResults)
+      return E_INVALIDARG;
+
+    for (size_t i = 0; i < FrameCount; i++)
+      pLowLatencyResults->frameReports[i] = D3D_LOW_LATENCY_FRAME_REPORT();
+
+    if (!m_reflexEnabled)
+      return DXGI_ERROR_INVALID_CALL;
+
+    std::lock_guard lock(m_mutex);
+
+    if (!m_tracker)
+      return S_OK;
+
+    // Apparently we have to report all 64 frames, or nothing
+    std::array<DxvkReflexFrameReport, FrameCount> reports = { };
+    uint32_t reportCount = m_tracker->getFrameReports(FrameCount, reports.data());
+
+    if (reportCount < FrameCount)
+      return S_OK;
+
+    for (uint32_t i = 0; i < FrameCount; i++) {
+      auto& src = reports[i];
+      auto& dst = pLowLatencyResults->frameReports[i];
+
+      dst.frameID = src.report.presentID;
+      dst.inputSampleTime = src.report.inputSampleTimeUs;
+      dst.simStartTime = src.report.simStartTimeUs;
+      dst.simEndTime = src.report.simEndTimeUs;
+      dst.renderSubmitStartTime = src.report.renderSubmitStartTimeUs;
+      dst.renderSubmitEndTime = src.report.renderSubmitEndTimeUs;
+      dst.presentStartTime = src.report.presentStartTimeUs;
+      dst.presentEndTime = src.report.presentEndTimeUs;
+      dst.driverStartTime = src.report.driverStartTimeUs;
+      dst.driverEndTime = src.report.driverEndTimeUs;
+      dst.osRenderQueueStartTime = src.report.osRenderQueueStartTimeUs;
+      dst.osRenderQueueEndTime = src.report.osRenderQueueEndTimeUs;
+      dst.gpuRenderStartTime = src.report.gpuRenderStartTimeUs;
+      dst.gpuRenderEndTime = src.report.gpuRenderEndTimeUs;
+      dst.gpuActiveRenderTimeUs = src.gpuActiveTimeUs;
+      dst.gpuFrameTimeUs = 0;
+
+      if (i) {
+        dst.gpuFrameTimeUs = reports[i - 0].report.gpuRenderEndTimeUs
+                           - reports[i - 1].report.gpuRenderEndTimeUs;
+      }
+    }
+
+    return S_OK;
+  }
+
+
+  void D3D11ReflexDevice::RegisterLatencyTracker(
+          Rc<DxvkLatencyTracker>          Tracker) {
+    std::lock_guard lock(m_mutex);
+
+    if (m_tracker)
+      return;
+
+    if ((m_tracker = dynamic_cast<DxvkReflexLatencyTrackerNv*>(Tracker.ptr())))
+      m_tracker->setLatencySleepMode(m_enableLowLatency, m_enableBoost, m_minIntervalUs);
+  }
+
+
+  void D3D11ReflexDevice::UnregisterLatencyTracker(
+          Rc<DxvkLatencyTracker>          Tracker) {
+    std::lock_guard lock(m_mutex);
+
+    if (m_tracker == Tracker)
+      m_tracker = nullptr;
+  }
+
+
+
+
   DXGIVkSwapChainFactory::DXGIVkSwapChainFactory(
           D3D11DXGIDevice*        pContainer,
           D3D11Device*            pDevice)
@@ -3159,9 +3359,11 @@ namespace dxvk {
     m_d3d11DeviceExt(this, &m_d3d11Device),
     m_d3d11Interop  (this, &m_d3d11Device),
     m_d3d11Video    (this, &m_d3d11Device),
+    m_d3d11Reflex   (this, &m_d3d11Device),
     m_d3d11on12     (this, &m_d3d11Device, pD3D12Device, pD3D12Queue),
     m_metaDevice    (this),
-    m_dxvkFactory   (this, &m_d3d11Device) {
+    m_dxvkFactory   (this, &m_d3d11Device),
+    m_destructionNotifier(this) {
 
   }
   
@@ -3231,8 +3433,14 @@ namespace dxvk {
       return S_OK;
     }
 
+    if (riid == __uuidof(ID3DLowLatencyDevice)) {
+      *ppvObject = ref(&m_d3d11Reflex);
+      return S_OK;
+    }
+
     if (m_d3d11on12.Is11on12Device()) {
-      if (riid == __uuidof(ID3D11On12Device)) {
+      if (riid == __uuidof(ID3D11On12Device)
+       || riid == __uuidof(ID3D11On12Device1_DXVK)) {
         *ppvObject = ref(&m_d3d11on12);
         return S_OK;
       }
@@ -3242,6 +3450,11 @@ namespace dxvk {
       Com<ID3D11DeviceContext> context;
       m_d3d11Device.GetImmediateContext(&context);
       return context->QueryInterface(riid, ppvObject);
+    }
+
+    if (riid == __uuidof(ID3DDestructionNotifier)) {
+      *ppvObject = ref(&m_destructionNotifier);
+      return S_OK;
     }
 
     if (riid == __uuidof(ID3D11Debug))

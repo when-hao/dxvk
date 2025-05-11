@@ -39,8 +39,7 @@ namespace dxvk {
   DxvkResourceBufferViewMap::DxvkResourceBufferViewMap(
           DxvkMemoryAllocator*        allocator,
           VkBuffer                    buffer)
-  : m_vkd(allocator->device()->vkd()), m_buffer(buffer),
-    m_passBufferUsage(allocator->device()->features().khrMaintenance5.maintenance5) {
+  : m_vkd(allocator->device()->vkd()), m_buffer(buffer) {
 
   }
 
@@ -64,14 +63,11 @@ namespace dxvk {
     VkBufferUsageFlags2CreateInfoKHR flags = { VK_STRUCTURE_TYPE_BUFFER_USAGE_FLAGS_2_CREATE_INFO_KHR };
     flags.usage = key.usage;
 
-    VkBufferViewCreateInfo info = { VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO };
+    VkBufferViewCreateInfo info = { VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO, &flags };
     info.buffer = m_buffer;
     info.format = key.format;
     info.offset = key.offset + baseOffset;
     info.range = key.size;
-
-    if (m_passBufferUsage)
-      info.pNext = &flags;
 
     VkBufferView view = VK_NULL_HANDLE;
 
@@ -752,6 +748,8 @@ namespace dxvk {
         memoryRequirements.memoryTypeBits = findGlobalBufferMemoryTypeMask(createInfo.usage);
 
       if (likely(memoryRequirements.memoryTypeBits)) {
+        bool allowSuballocation = true;
+
         // If the given allocation cache supports the memory types and usage
         // flags that we need, try to use it to service this allocation.
         // Only use the allocation cache for mappable allocations since those
@@ -769,44 +767,50 @@ namespace dxvk {
           // for any relevant memory pools as necessary.
           if (refillAllocationCache(allocationCache, memoryRequirements, allocationInfo.properties))
             return allocationCache->allocateFromCache(createInfo.size);
+        } else {
+          // Do not suballocate buffers if debug mode is enabled in order
+          // to allow the application to set meaningful debug names.
+          allowSuballocation = !m_device->debugFlags().test(DxvkDebugFlag::Capture);
         }
 
         // If there is at least one memory type that supports the required
         // buffer usage flags and requested memory properties, suballocate
         // from a global buffer.
-        allocation = allocateMemory(memoryRequirements, allocationInfo);
-
-        if (likely(allocation && allocation->m_buffer))
-          return allocation;
-
-        if (!allocation && (allocationInfo.properties & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
-         && !allocationInfo.mode.test(DxvkAllocationMode::NoFallback)) {
-          DxvkAllocationInfo fallbackInfo = allocationInfo;
-          fallbackInfo.properties &= ~VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-
-          allocation = allocateMemory(memoryRequirements, fallbackInfo);
+        if (likely(allowSuballocation)) {
+          allocation = allocateMemory(memoryRequirements, allocationInfo);
 
           if (likely(allocation && allocation->m_buffer))
             return allocation;
-        }
 
-        // If we can't get an allocation for a global buffer, there's no
-        // real point in retrying with a dedicated buffer since the result
-        // will most likely be the same.
-        if (!allocation) {
-          if (allocationInfo.mode.isClear()) {
-            logMemoryError(memoryRequirements);
-            logMemoryStats();
+          if (!allocation && (allocationInfo.properties & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+          && !allocationInfo.mode.test(DxvkAllocationMode::NoFallback)) {
+            DxvkAllocationInfo fallbackInfo = allocationInfo;
+            fallbackInfo.properties &= ~VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+            allocation = allocateMemory(memoryRequirements, fallbackInfo);
+
+            if (likely(allocation && allocation->m_buffer))
+              return allocation;
           }
 
-          return nullptr;
-        }
+          // If we can't get an allocation for a global buffer, there's no
+          // real point in retrying with a dedicated buffer since the result
+          // will most likely be the same.
+          if (!allocation) {
+            if (allocationInfo.mode.isClear()) {
+              logMemoryError(memoryRequirements);
+              logMemoryStats();
+            }
 
-        // If we end up here with an allocation but no buffer, something
-        // is weird, but we can keep the allocation around for now.
-        if (!allocation->m_buffer) {
-          Logger::err(str::format("Got allocation from memory type ",
-            allocation->m_type->index, " without global buffer"));
+            return nullptr;
+          }
+
+          // If we end up here with an allocation but no buffer, something
+          // is weird, but we can keep the allocation around for now.
+          if (!allocation->m_buffer) {
+            Logger::err(str::format("Got allocation from memory type ",
+              allocation->m_type->index, " without global buffer"));
+          }
         }
       }
     }
@@ -923,6 +927,9 @@ namespace dxvk {
       dedicatedRequirements.requiresDedicatedAllocation = VK_TRUE;
       dedicatedRequirements.prefersDedicatedAllocation = VK_TRUE;
     }
+
+    if (!dedicatedRequirements.requiresDedicatedAllocation && allocationInfo.mode.test(DxvkAllocationMode::NoDedicated))
+      dedicatedRequirements.prefersDedicatedAllocation = VK_FALSE;
 
     Rc<DxvkResourceAllocation> allocation;
 
@@ -1209,8 +1216,52 @@ namespace dxvk {
       }
     }
 
+    result.cookie = ++m_nextCookie;
+
+    if (unlikely(m_device->debugFlags().test(DxvkDebugFlag::Capture)))
+      assignMemoryDebugName(result, type);
+
     type.stats.memoryAllocated += size;
     return result;
+  }
+
+
+  void DxvkMemoryAllocator::assignMemoryDebugName(
+    const DxvkDeviceMemory&     memory,
+    const DxvkMemoryType&       type) {
+    auto vk = m_device->vkd();
+
+    const char* memoryType = "Unspecified memory";
+
+    if (type.properties.propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+      if (type.properties.propertyFlags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT)
+        memoryType = "Cached system memory";
+      else if (type.properties.propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+        memoryType = "Mapped video memory";
+      else
+        memoryType = "Write-combined system memory";
+    } else if (type.properties.propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
+      memoryType = "Video memory";
+    }
+
+    std::string memoryName = str::format(memoryType, " (", memory.cookie, ")");
+
+    VkDebugUtilsObjectNameInfoEXT nameInfo = { VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT };
+    nameInfo.objectType = VK_OBJECT_TYPE_DEVICE_MEMORY;
+    nameInfo.objectHandle = vk::getObjectHandle(memory.memory);
+    nameInfo.pObjectName = memoryName.c_str();
+
+    vk->vkSetDebugUtilsObjectNameEXT(vk->device(), &nameInfo);
+
+    if (memory.buffer) {
+      std::string bufferName = str::format("Global buffer (", memory.cookie, ")");
+
+      nameInfo.objectType = VK_OBJECT_TYPE_BUFFER;
+      nameInfo.objectHandle = vk::getObjectHandle(memory.buffer);
+      nameInfo.pObjectName = bufferName.c_str();
+
+      vk->vkSetDebugUtilsObjectNameEXT(vk->device(), &nameInfo);
+    }
   }
 
 
@@ -1247,7 +1298,6 @@ namespace dxvk {
     pool.chunks.resize(std::max<size_t>(pool.chunks.size(), chunkIndex + 1u));
     pool.chunks[chunkIndex].memory = chunk;
     pool.chunks[chunkIndex].unusedTime = high_resolution_clock::time_point();
-    pool.chunks[chunkIndex].chunkCookie = ++pool.nextChunkCookie;
     pool.chunks[chunkIndex].canMove = true;
     return true;
   }
@@ -1679,7 +1729,7 @@ namespace dxvk {
       chunkStats.pageCount = pool.pageAllocator.pageCount(i);
       chunkStats.mapped = &pool == &type.mappedPool;
       chunkStats.active = pool.pageAllocator.chunkIsAvailable(i);
-      chunkStats.cookie = pool.chunks[i].chunkCookie;
+      chunkStats.cookie = pool.chunks[i].memory.cookie;
 
       size_t maskCount = (chunkStats.pageCount + 31u) / 32u;
       stats.pageMasks.resize(chunkStats.pageMaskOffset + maskCount);
@@ -1772,19 +1822,12 @@ namespace dxvk {
 
   void DxvkMemoryAllocator::determineBufferUsageFlagsPerMemoryType() {
     VkBufferUsageFlags flags = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT
+                             | VK_BUFFER_USAGE_INDEX_BUFFER_BIT
                              | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
                              | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
                              | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
-                             | VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
-
-    // Lock storage texel buffer usage to maintenance5 support since we will
-    // otherwise not be able to legally use formats that support one type of
-    // texel buffer but not the other. Also lock index buffer usage since we
-    // cannot explicitly specify a buffer range otherwise.
-    if (m_device->features().khrMaintenance5.maintenance5) {
-      flags |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT
-            |  VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
-    }
+                             | VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT
+                             | VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
 
     if (m_device->features().extTransformFeedback.transformFeedback) {
       flags |= VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT
@@ -1834,6 +1877,9 @@ namespace dxvk {
     for (uint32_t i = 0; i < m_memTypeCount; i++) {
       bufferInfo.usage = m_memTypes[i].bufferUsage;
 
+      if (!bufferInfo.usage)
+        continue;
+
       if (!getBufferMemoryRequirements(bufferInfo, requirements)
        || !(requirements.memoryRequirements.memoryTypeBits & (1u << i))) {
         m_memTypes[i].bufferUsage &= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
@@ -1857,7 +1903,9 @@ namespace dxvk {
     // flags. This lets us avoid iterating over unsupported memory types
     for (uint32_t i = 0; i < m_memTypesByPropertyFlags.size(); i++) {
       VkMemoryPropertyFlags flags = VkMemoryPropertyFlags(i);
-      uint32_t mask = 0u;
+
+      uint32_t vidmemMask = 0u;
+      uint32_t sysmemMask = 0u;
 
       for (uint32_t j = 0; j < m_memTypeCount; j++) {
         VkMemoryPropertyFlags typeFlags = m_memTypes[j].properties.propertyFlags;
@@ -1865,16 +1913,16 @@ namespace dxvk {
         if ((typeFlags & flags) != flags)
           continue;
 
-        // Do not include device-local memory types if a non-device
-        // local one exists with the same required propery flags.
-        if (mask && !(flags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
-         && (typeFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
-          continue;
-
-        mask |= 1u << j;
+        if (typeFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+          vidmemMask |= 1u << j;
+        else
+          sysmemMask |= 1u << j;
       }
 
-      m_memTypesByPropertyFlags[i] = mask;
+      // If a system memory type exists with the given properties, do not
+      // include any device-local memory types. This way we won't ever pick
+      // host-visible vram when explicitly trying to allocate system memory.
+      m_memTypesByPropertyFlags[i] = sysmemMask ? sysmemMask : vidmemMask;
     }
 
     // If there is no cached coherent memory type, reuse the uncached
@@ -1953,23 +2001,11 @@ namespace dxvk {
           VkMemoryRequirements2&  memoryRequirements) const {
     auto vk = m_device->vkd();
 
-    if (m_device->features().vk13.maintenance4) {
-      VkDeviceBufferMemoryRequirements info = { VK_STRUCTURE_TYPE_DEVICE_BUFFER_MEMORY_REQUIREMENTS };
-      info.pCreateInfo = &createInfo;
+    VkDeviceBufferMemoryRequirements info = { VK_STRUCTURE_TYPE_DEVICE_BUFFER_MEMORY_REQUIREMENTS };
+    info.pCreateInfo = &createInfo;
 
-      vk->vkGetDeviceBufferMemoryRequirements(vk->device(), &info, &memoryRequirements);
-      return true;
-    } else {
-      VkBufferMemoryRequirementsInfo2 info = { VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2 };
-      VkResult vr = vk->vkCreateBuffer(vk->device(), &createInfo, nullptr, &info.buffer);
-
-      if (vr != VK_SUCCESS)
-        return false;
-
-      vk->vkGetBufferMemoryRequirements2(vk->device(), &info, &memoryRequirements);
-      vk->vkDestroyBuffer(vk->device(), info.buffer, nullptr);
-      return true;
-    }
+    vk->vkGetDeviceBufferMemoryRequirements(vk->device(), &info, &memoryRequirements);
+    return true;
   }
 
 
@@ -1978,23 +2014,11 @@ namespace dxvk {
           VkMemoryRequirements2&  memoryRequirements) const {
     auto vk = m_device->vkd();
 
-    if (m_device->features().vk13.maintenance4) {
-      VkDeviceImageMemoryRequirements info = { VK_STRUCTURE_TYPE_DEVICE_IMAGE_MEMORY_REQUIREMENTS };
-      info.pCreateInfo = &createInfo;
+    VkDeviceImageMemoryRequirements info = { VK_STRUCTURE_TYPE_DEVICE_IMAGE_MEMORY_REQUIREMENTS };
+    info.pCreateInfo = &createInfo;
 
-      vk->vkGetDeviceImageMemoryRequirements(vk->device(), &info, &memoryRequirements);
-      return true;
-    } else {
-      VkImageMemoryRequirementsInfo2 info = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2 };
-      VkResult vr = vk->vkCreateImage(vk->device(), &createInfo, nullptr, &info.image);
-
-      if (vr != VK_SUCCESS)
-        return false;
-
-      vk->vkGetImageMemoryRequirements2(vk->device(), &info, &memoryRequirements);
-      vk->vkDestroyImage(vk->device(), info.image, nullptr);
-      return true;
-    }
+    vk->vkGetDeviceImageMemoryRequirements(vk->device(), &info, &memoryRequirements);
+    return true;
   }
 
 

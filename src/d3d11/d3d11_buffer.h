@@ -61,6 +61,8 @@ namespace dxvk {
     void STDMETHODCALLTYPE GetDesc(
             D3D11_BUFFER_DESC *pDesc) final;
     
+    void STDMETHODCALLTYPE SetDebugName(const char* pName) final;
+
     bool CheckViewCompatibility(
             UINT                BindFlags,
             DXGI_FORMAT         Format) const;
@@ -197,6 +199,8 @@ namespace dxvk {
 
     D3D11DXGIResource             m_resource;
     D3D10Buffer                   m_d3d10;
+
+    D3DDestructionNotifier        m_destructionNotifier;
 
     BOOL CheckFormatFeatureSupport(
             VkFormat              Format,

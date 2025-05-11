@@ -526,6 +526,14 @@ namespace dxvk {
     }
 
     /**
+     * \brief Sets debug name for texture
+     *
+     * Passes the given name to the backing image or buffer.
+     * \param [in] name Debug name
+     */
+    void SetDebugName(const char* pName);
+
+    /**
      * \brief Normalizes and validates texture description
      * 
      * Fills in undefined values and validates the texture
@@ -595,6 +603,7 @@ namespace dxvk {
             VkFormatFeatureFlags2 Features) const;
     
     std::pair<D3D11_COMMON_TEXTURE_MAP_MODE, VkMemoryPropertyFlags> DetermineMapMode(
+      const D3D11Device*          device,
       const DxvkImageCreateInfo*  pImageInfo) const;
 
     D3D11_COMMON_TEXTURE_SUBRESOURCE_LAYOUT DetermineSubresourceLayout(
@@ -728,6 +737,8 @@ namespace dxvk {
     
     ID3D11Resource*     m_resource;
     D3D11CommonTexture* m_texture;
+
+    std::atomic<bool>   m_locked = { false };
     
   };
   
@@ -759,6 +770,8 @@ namespace dxvk {
     void STDMETHODCALLTYPE GetDesc(
             D3D11_TEXTURE1D_DESC *pDesc) final;
     
+    void STDMETHODCALLTYPE SetDebugName(const char* pName) final;
+
     D3D11CommonTexture* GetCommonTexture() {
       return &m_texture;
     }
@@ -774,7 +787,9 @@ namespace dxvk {
     D3D11DXGISurface      m_surface;
     D3D11DXGIResource     m_resource;
     D3D10Texture1D        m_d3d10;
-    
+
+    D3DDestructionNotifier m_destructionNotifier;
+
   };
   
   
@@ -825,6 +840,8 @@ namespace dxvk {
     void STDMETHODCALLTYPE GetDesc1(
             D3D11_TEXTURE2D_DESC1* pDesc) final;
     
+    void STDMETHODCALLTYPE SetDebugName(const char* pName) final;
+
     D3D11CommonTexture* GetCommonTexture() {
       return &m_texture;
     }
@@ -840,8 +857,10 @@ namespace dxvk {
     D3D11DXGISurface      m_surface;
     D3D11DXGIResource     m_resource;
     D3D10Texture2D        m_d3d10;
-    IUnknown*             m_swapChain;
-    
+    IUnknown*             m_swapChain = nullptr;
+
+    D3DDestructionNotifier m_destructionNotifier;
+
   };
   
   
@@ -875,6 +894,8 @@ namespace dxvk {
     void STDMETHODCALLTYPE GetDesc1(
             D3D11_TEXTURE3D_DESC1* pDesc) final;
     
+    void STDMETHODCALLTYPE SetDebugName(const char* pName) final;
+
     D3D11CommonTexture* GetCommonTexture() {
       return &m_texture;
     }
@@ -889,6 +910,8 @@ namespace dxvk {
     D3D11VkInteropSurface m_interop;
     D3D11DXGIResource     m_resource;
     D3D10Texture3D        m_d3d10;
+
+    D3DDestructionNotifier m_destructionNotifier;
     
   };
   

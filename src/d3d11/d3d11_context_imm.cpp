@@ -18,10 +18,11 @@ namespace dxvk {
   : D3D11CommonContext<D3D11ImmediateContext>(pParent, Device, 0, DxvkCsChunkFlag::SingleUse),
     m_csThread(Device, Device->createContext()),
     m_submissionFence(new sync::CallbackFence()),
-    m_flushTracker(pParent->GetOptions()->reproducibleCommandStream),
+    m_flushTracker(GetMaxFlushType(pParent, Device)),
     m_stagingBufferFence(new sync::Fence(0)),
     m_multithread(this, false, pParent->GetOptions()->enableContextLock),
-    m_videoContext(this, Device) {
+    m_videoContext(this, Device),
+    m_destructionNotifier(this) {
     EmitCs([
       cDevice                 = m_device,
       cBarrierControlFlags    = pParent->GetOptionsBarrierControlFlags()
@@ -62,6 +63,11 @@ namespace dxvk {
       return S_OK;
     }
 
+    if (riid == __uuidof(ID3DDestructionNotifier)) {
+      *ppvObject = ref(&m_destructionNotifier);
+      return S_OK;
+    }
+
     return D3D11CommonContext<D3D11ImmediateContext>::QueryInterface(riid, ppvObject);
   }
 
@@ -97,6 +103,10 @@ namespace dxvk {
       // Ignore the DONOTFLUSH flag here as some games will spin
       // on queries without ever flushing the context otherwise.
       D3D10DeviceLock lock = LockContext();
+
+      if (unlikely(m_device->debugFlags().test(DxvkDebugFlag::Capture)))
+        m_flushReason = "Query read-back";
+
       ConsiderFlush(GpuFlushType::ImplicitSynchronization);
     }
     
@@ -156,6 +166,9 @@ namespace dxvk {
   void STDMETHODCALLTYPE D3D11ImmediateContext::Flush() {
     D3D10DeviceLock lock = LockContext();
 
+    if (unlikely(m_device->debugFlags().test(DxvkDebugFlag::Capture)))
+      m_flushReason = "Explicit Flush";
+
     ExecuteFlush(GpuFlushType::ExplicitFlush, nullptr, true);
   }
 
@@ -164,6 +177,9 @@ namespace dxvk {
           D3D11_CONTEXT_TYPE          ContextType,
           HANDLE                      hEvent) {
     D3D10DeviceLock lock = LockContext();
+
+    if (unlikely(m_device->debugFlags().test(DxvkDebugFlag::Capture)))
+      m_flushReason = "Explicit Flush";
 
     ExecuteFlush(GpuFlushType::ExplicitFlush, hEvent, true);
   }
@@ -185,6 +201,9 @@ namespace dxvk {
       ctx->signalFence(cFence, cValue);
     });
 
+    if (unlikely(m_device->debugFlags().test(DxvkDebugFlag::Capture)))
+      m_flushReason = "Fence signal";
+
     ExecuteFlush(GpuFlushType::ExplicitFlush, nullptr, true);
     return S_OK;
   }
@@ -198,6 +217,9 @@ namespace dxvk {
 
     if (!fence)
       return E_INVALIDARG;
+
+    if (unlikely(m_device->debugFlags().test(DxvkDebugFlag::Capture)))
+      m_flushReason = "Fence wait";
 
     ExecuteFlush(GpuFlushType::ExplicitFlush, nullptr, true);
 
@@ -218,7 +240,12 @@ namespace dxvk {
     D3D10DeviceLock lock = LockContext();
 
     auto commandList = static_cast<D3D11CommandList*>(pCommandList);
-    
+
+    // Reset dirty binding tracking before submitting any CS chunks.
+    // This is needed so that any submission that might occur during
+    // this call does not disrupt bindings set by the deferred context.
+    ResetDirtyTracking();
+
     // Clear state so that the command list can't observe any
     // current context state. The command list itself will clean
     // up after execution to ensure that no state changes done
@@ -484,7 +511,7 @@ namespace dxvk {
           cStorage = pResource->DiscardStorage()
         ] (DxvkContext* ctx) {
           ctx->invalidateImage(cImage, Rc<DxvkResourceAllocation>(cStorage));
-          ctx->initImage(cImage, cImage->getAvailableSubresources(), VK_IMAGE_LAYOUT_PREINITIALIZED);
+          ctx->initImage(cImage, VK_IMAGE_LAYOUT_PREINITIALIZED);
         });
 
         ThrottleDiscard(layout.Size);
@@ -754,7 +781,11 @@ namespace dxvk {
     if (!pState)
       return;
 
-    // Reset all state affected by the current context state
+    // Clear dirty tracking here since all context state will be
+    // re-applied anyway when the context state is swapped in again.
+    ResetDirtyTracking();
+
+    // Reset all state affected by the current context state.
     ResetCommandListState();
 
     Com<D3D11DeviceContextState, false> oldState = std::move(m_stateObject);
@@ -861,11 +892,22 @@ namespace dxvk {
   }
   
   
-  void D3D11ImmediateContext::EndFrame() {
+  void D3D11ImmediateContext::EndFrame(
+          Rc<DxvkLatencyTracker>      LatencyTracker) {
     D3D10DeviceLock lock = LockContext();
 
-    EmitCs<false>([] (DxvkContext* ctx) {
+    // Don't keep draw buffers alive indefinitely. This cannot be
+    // done in ExecuteFlush because command recording itself might
+    // flush, so no state changes are allowed to happen there.
+    SetDrawBuffers(nullptr, nullptr);
+
+    EmitCs<false>([
+      cTracker = std::move(LatencyTracker)
+    ] (DxvkContext* ctx) {
       ctx->endFrame();
+
+      if (cTracker && cTracker->needsAutoMarkers())
+        ctx->endLatencyTracking(cTracker);
     });
   }
 
@@ -883,42 +925,44 @@ namespace dxvk {
     // Wait for any CS chunk using the resource to execute, since
     // otherwise we cannot accurately determine if the resource is
     // actually being used by the GPU right now.
-    bool isInUse = Resource.isInUse(access);
-
-    if (!isInUse) {
+    if (!Resource.isInUse(access)) {
       SynchronizeCsThread(SequenceNumber);
-      isInUse = Resource.isInUse(access);
+
+      if (!Resource.isInUse(access))
+        return true;
+    }
+
+    if (unlikely(m_device->debugFlags().test(DxvkDebugFlag::Capture))) {
+      m_flushReason = str::format("Map ", Resource.getDebugName(), " (MAP",
+        MapType != D3D11_MAP_WRITE ? "_READ" : "",
+        MapType != D3D11_MAP_READ ? "_WRITE" : "", ")");
     }
 
     if (MapFlags & D3D11_MAP_FLAG_DO_NOT_WAIT) {
-      if (isInUse) {
-        // We don't have to wait, but misbehaving games may
-        // still try to spin on `Map` until the resource is
-        // idle, so we should flush pending commands
-        ConsiderFlush(GpuFlushType::ImplicitSynchronization);
-        return false;
-      }
+      // We don't have to wait, but misbehaving games may
+      // still try to spin on `Map` until the resource is
+      // idle, so we should flush pending commands
+      ConsiderFlush(GpuFlushType::ImplicitSynchronization);
+      return false;
     } else {
-      if (isInUse) {
-        // Make sure pending commands using the resource get
-        // executed on the the GPU if we have to wait for it
-        ExecuteFlush(GpuFlushType::ImplicitSynchronization, nullptr, false);
-        SynchronizeCsThread(SequenceNumber);
+      // Make sure pending commands using the resource get
+      // executed on the the GPU if we have to wait for it
+      ExecuteFlush(GpuFlushType::ImplicitSynchronization, nullptr, false);
+      SynchronizeCsThread(SequenceNumber);
 
-        m_device->waitForResource(Resource, access);
-      }
+      m_device->waitForResource(Resource, access);
+      return true;
     }
-
-    return true;
   }
-  
-  
+
+
   void D3D11ImmediateContext::InjectCsChunk(
+          DxvkCsQueue                 Queue,
           DxvkCsChunkRef&&            Chunk,
           bool                        Synchronize) {
     // Do not update the sequence number when emitting a chunk
     // from an external source since that would break tracking
-    m_csThread.injectChunk(std::move(Chunk), Synchronize);
+    m_csThread.injectChunk(Queue, std::move(Chunk), Synchronize);
   }
 
 
@@ -963,8 +1007,106 @@ namespace dxvk {
   }
 
 
+  void D3D11ImmediateContext::ApplyDirtyNullBindings() {
+    // At the end of a submission, set all bindings that have not been applied yet
+    // to null on the DXVK context. This way, we avoid keeping resources alive that
+    // are bound to the DXVK context but not to the immediate context.
+    //
+    // Note: This requires that all methods that may modify dirty bindings on the
+    // DXVK context also reset the corresponding dirty bits *before* performing the
+    // bind operation, or otherwise an implicit flush can potentially override them.
+    auto& dirtyState = m_state.lazy.bindingsDirty;
+
+    EmitCs<false>([
+      cDirtyState = dirtyState
+    ] (DxvkContext* ctx) {
+      for (uint32_t i = 0; i < uint32_t(DxbcProgramType::Count); i++) {
+        auto dxStage = DxbcProgramType(i);
+        auto vkStage = GetShaderStage(dxStage);
+
+        // Unbind all dirty constant buffers
+        auto cbvSlot = computeConstantBufferBinding(dxStage, 0);
+
+        for (uint32_t index : bit::BitMask(cDirtyState[dxStage].cbvMask))
+          ctx->bindUniformBuffer(vkStage, cbvSlot + index, DxvkBufferSlice());
+
+        // Unbind all dirty samplers
+        auto samplerSlot = computeSamplerBinding(dxStage, 0);
+
+        for (uint32_t index : bit::BitMask(cDirtyState[dxStage].samplerMask))
+          ctx->bindResourceSampler(vkStage, samplerSlot + index, nullptr);
+
+        // Unbind all dirty shader resource views
+        auto srvSlot = computeSrvBinding(dxStage, 0);
+
+        for (uint32_t m = 0; m < cDirtyState[dxStage].srvMask.size(); m++) {
+          for (uint32_t index : bit::BitMask(cDirtyState[dxStage].srvMask[m]))
+            ctx->bindResourceImageView(vkStage, srvSlot + index + m * 64u, nullptr);
+        }
+
+        // Unbind all dirty unordered access views
+        VkShaderStageFlags uavStages = 0u;
+
+        if (dxStage == DxbcProgramType::ComputeShader)
+          uavStages = VK_SHADER_STAGE_COMPUTE_BIT;
+        else if (dxStage == DxbcProgramType::PixelShader)
+          uavStages = VK_SHADER_STAGE_ALL_GRAPHICS;
+
+        if (uavStages) {
+          auto uavSlot = computeUavBinding(dxStage, 0);
+          auto ctrSlot = computeUavCounterBinding(dxStage, 0);
+
+          for (uint32_t index : bit::BitMask(cDirtyState[dxStage].uavMask)) {
+            ctx->bindResourceImageView(vkStage, uavSlot + index, nullptr);
+            ctx->bindResourceBufferView(vkStage, ctrSlot + index, nullptr);
+          }
+        }
+      }
+    });
+
+    // Since we set the DXVK context bindings to null, any bindings that are null
+    // on the D3D context are no longer dirty, so we can clear the respective bits.
+    for (uint32_t i = 0; i < uint32_t(DxbcProgramType::Count); i++) {
+      auto stage = DxbcProgramType(i);
+
+      for (uint32_t index : bit::BitMask(dirtyState[stage].cbvMask)) {
+        if (!m_state.cbv[stage].buffers[index].buffer.ptr())
+          dirtyState[stage].cbvMask &= ~(1u << index);
+      }
+
+      for (uint32_t index : bit::BitMask(dirtyState[stage].samplerMask)) {
+        if (!m_state.samplers[stage].samplers[index])
+          dirtyState[stage].samplerMask &= ~(1u << index);
+      }
+
+      for (uint32_t m = 0; m < dirtyState[stage].srvMask.size(); m++) {
+        for (uint32_t index : bit::BitMask(dirtyState[stage].srvMask[m])) {
+          if (!m_state.srv[stage].views[index + m * 64u].ptr())
+            dirtyState[stage].srvMask[m] &= ~(uint64_t(1u) << index);
+        }
+      }
+
+      if (stage == DxbcProgramType::ComputeShader || stage == DxbcProgramType::PixelShader) {
+        auto& uavs = stage == DxbcProgramType::ComputeShader ? m_state.uav.views : m_state.om.uavs;
+
+        for (uint32_t index : bit::BitMask(dirtyState[stage].uavMask)) {
+          if (!uavs[index].ptr())
+            dirtyState[stage].uavMask &= ~(uint64_t(1u) << index);
+        }
+      }
+
+      if (dirtyState[stage].empty())
+        m_state.lazy.shadersDirty.clr(stage);
+    }
+  }
+
+
   void D3D11ImmediateContext::ConsiderFlush(
           GpuFlushType                FlushType) {
+    // In stress test mode, behave as if this would always flush
+    if (DebugLazyBinding == Tristate::True)
+      ApplyDirtyNullBindings();
+
     uint64_t chunkId = GetCurrentSequenceNumber();
     uint64_t submissionId = m_submissionFence->value();
 
@@ -986,6 +1128,9 @@ namespace dxvk {
     if (!GetPendingCsChunks() && !hEvent)
       return;
 
+    // Unbind unused resources
+    ApplyDirtyNullBindings();
+
     // Signal the submission fence and flush the command list
     uint64_t submissionId = ++m_submissionId;
 
@@ -1000,11 +1145,14 @@ namespace dxvk {
       cSubmissionId     = submissionId,
       cSubmissionStatus = synchronizeSubmission ? &m_submitStatus : nullptr,
       cStagingFence     = m_stagingBufferFence,
-      cStagingMemory    = GetStagingMemoryStatistics().allocatedTotal
+      cStagingMemory    = GetStagingMemoryStatistics().allocatedTotal,
+      cFlushReason      = std::exchange(m_flushReason, std::string())
     ] (DxvkContext* ctx) {
+      auto debugLabel = vk::makeLabel(0xff5959, cFlushReason.c_str());
+
       ctx->signal(cSubmissionFence, cSubmissionId);
       ctx->signal(cStagingFence, cStagingMemory);
-      ctx->flushCommandList(cSubmissionStatus);
+      ctx->flushCommandList(&debugLabel, cSubmissionStatus);
     });
 
     FlushCsChunk();
@@ -1060,11 +1208,39 @@ namespace dxvk {
   }
 
 
+  void D3D11ImmediateContext::NotifyRenderPassBoundary() {
+    if (m_device->perfHints().preferRenderPassOps) {
+      // On tilers, we want to avoid submitting during a render pass or a sequence
+      // of render passes as much as possible, but if a submission request has been
+      // rejected before, we should do it now in order to avoid read-back delays.
+      GpuFlushType pending = m_flushTracker.getPendingType();
+
+      if (pending != GpuFlushType::None)
+        ExecuteFlush(pending, nullptr, false);
+    } else {
+      // Doing this makes it less likely to flush during render passes
+      ConsiderFlush(GpuFlushType::ImplicitWeakHint);
+    }
+  }
+
+
   DxvkStagingBufferStats D3D11ImmediateContext::GetStagingMemoryStatistics() {
     DxvkStagingBufferStats stats = m_staging.getStatistics();
     stats.allocatedTotal += m_discardMemoryCounter;
     stats.allocatedSinceLastReset += m_discardMemoryCounter - m_discardMemoryOnFlush;
     return stats;
+  }
+
+
+  GpuFlushType D3D11ImmediateContext::GetMaxFlushType(
+          D3D11Device*    pParent,
+    const Rc<DxvkDevice>& Device) {
+    if (pParent->GetOptions()->reproducibleCommandStream)
+      return GpuFlushType::ExplicitFlush;
+    else if (Device->perfHints().preferRenderPassOps)
+      return GpuFlushType::ImplicitStrongHint;
+    else
+      return GpuFlushType::ImplicitWeakHint;
   }
 
 }

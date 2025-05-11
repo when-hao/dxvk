@@ -41,6 +41,7 @@ namespace dxvk {
 
     m_usedSamplers = 0;
     m_usedRTs      = 0;
+    m_textureTypes = 0;
     m_rRegs.reserve(DxsoMaxTempRegs);
 
     for (uint32_t i = 0; i < m_rRegs.size(); i++)
@@ -762,6 +763,10 @@ namespace dxvk {
         // We could also be depth compared!
         DclSampler(idx, binding, samplerType, true, implicit);
       }
+
+      const uint32_t offset = idx * 2;
+      uint32_t textureBits = uint32_t(viewType);
+      m_textureTypes |= textureBits << offset;
     }
     else {
       // Could be any of these!
@@ -1158,8 +1163,7 @@ namespace dxvk {
             return m_vs.oPSize;
 
           default: {
-            DxsoRegisterPointer nullPointer;
-            nullPointer.id = 0;
+            DxsoRegisterPointer nullPointer = { };
             return nullPointer;
           }
         }
@@ -1269,8 +1273,7 @@ namespace dxvk {
       default: {
         //Logger::warn(str::format("emitGetOperandPtr: unhandled reg type: ", reg.id.type));
 
-        DxsoRegisterPointer nullPointer;
-        nullPointer.id = 0;
+        DxsoRegisterPointer nullPointer = { };
         return nullPointer;
       }
     }
@@ -1952,7 +1955,7 @@ namespace dxvk {
 
         if (m_moduleInfo.options.d3d9FloatEmulation == D3D9FloatEmulation::Enabled) {
           result.id = m_module.opNMin(typeId, result.id,
-            m_module.constfReplicant(FLT_MAX, result.type.ccount));
+            m_module.constfReplicant(std::numeric_limits<float>::max(), result.type.ccount));
         }
         break;
       case DxsoOpcode::Rsq: 
@@ -1964,7 +1967,7 @@ namespace dxvk {
 
         if (m_moduleInfo.options.d3d9FloatEmulation == D3D9FloatEmulation::Enabled) {
           result.id = m_module.opNMin(typeId, result.id,
-            m_module.constfReplicant(FLT_MAX, result.type.ccount));
+            m_module.constfReplicant(std::numeric_limits<float>::max(), result.type.ccount));
         }
         break;
       case DxsoOpcode::Dp3: {
@@ -2024,7 +2027,7 @@ namespace dxvk {
 
         if (m_moduleInfo.options.d3d9FloatEmulation == D3D9FloatEmulation::Enabled) {
           result.id = m_module.opNMin(typeId, result.id,
-            m_module.constfReplicant(FLT_MAX, result.type.ccount));
+            m_module.constfReplicant(std::numeric_limits<float>::max(), result.type.ccount));
         }
           break;
         }
@@ -2035,7 +2038,7 @@ namespace dxvk {
 
         if (m_moduleInfo.options.d3d9FloatEmulation == D3D9FloatEmulation::Enabled) {
           result.id = m_module.opNMin(typeId, result.id,
-            m_module.constfReplicant(FLT_MAX, result.type.ccount));
+            m_module.constfReplicant(std::numeric_limits<float>::max(), result.type.ccount));
         }
         break;
       case DxsoOpcode::Pow: {
@@ -2097,7 +2100,7 @@ namespace dxvk {
         rcpLength.type = scalarType;
         rcpLength.id = m_module.opInverseSqrt(scalarTypeId, dot.id);
         if (m_moduleInfo.options.d3d9FloatEmulation == D3D9FloatEmulation::Enabled) {
-          rcpLength.id = m_module.opNMin(scalarTypeId, rcpLength.id, m_module.constf32(FLT_MAX));
+          rcpLength.id = m_module.opNMin(scalarTypeId, rcpLength.id, m_module.constf32(std::numeric_limits<float>::max()));
         }
 
         // r * rsq(r . r)
@@ -2111,11 +2114,17 @@ namespace dxvk {
         std::array<uint32_t, 4> sincosVectorIndices = { 0, 0, 0, 0 };
 
         uint32_t index = 0;
+        uint32_t type = m_module.defFloatType(32);
+        uint32_t sincos = m_module.opSinCos(src0, !m_moduleInfo.options.sincosEmulation);
+
+        uint32_t sinIndex = 0u;
+        uint32_t cosIndex = 1u;
+
         if (mask[0])
-          sincosVectorIndices[index++] = m_module.opCos(scalarTypeId, src0);
+          sincosVectorIndices[index++] = m_module.opCompositeExtract(type, sincos, 1u, &cosIndex);
 
         if (mask[1])
-          sincosVectorIndices[index++] = m_module.opSin(scalarTypeId, src0);
+          sincosVectorIndices[index++] = m_module.opCompositeExtract(type, sincos, 1u, &sinIndex);
 
         for (; index < result.type.ccount; index++) {
           if (sincosVectorIndices[index] == 0)
@@ -2211,7 +2220,7 @@ namespace dxvk {
         result.id = m_module.opLog2(typeId, result.id);
         if (m_moduleInfo.options.d3d9FloatEmulation == D3D9FloatEmulation::Enabled) {
           result.id = m_module.opNMax(typeId, result.id,
-            m_module.constfReplicant(-FLT_MAX, result.type.ccount));
+            m_module.constfReplicant(-std::numeric_limits<float>::max(), result.type.ccount));
         }
         break;
       case DxsoOpcode::Lrp:
@@ -2697,7 +2706,7 @@ void DxsoCompiler::emitControlFlowGenericLoop(
     const DxsoOpcode opcode = ctx.instruction.opcode;
 
     DxsoRegisterValue texcoordVar;
-    uint32_t samplerIdx;
+    uint32_t samplerIdx = 0u;
 
     DxsoRegMask vec3Mask(true, true, true,  false);
     DxsoRegMask srcMask (true, true, true,  true);
@@ -2960,7 +2969,7 @@ void DxsoCompiler::emitControlFlowGenericLoop(
         uint32_t lOffset = m_module.opAccessChain(m_module.defPointerType(float_t, spv::StorageClassUniform),
                                                   m_ps.sharedState, 1, &index);
                  lOffset = m_module.opLoad(float_t, lOffset);
-            
+
         uint32_t zIndex = 2;
         uint32_t scale = m_module.opCompositeExtract(float_t, result.id, 1, &zIndex);
                  scale = m_module.opFMul(float_t, scale, lScale);
@@ -2975,7 +2984,7 @@ void DxsoCompiler::emitControlFlowGenericLoop(
 
     auto SampleType = [&](DxsoSamplerType samplerType) {
       uint32_t bitOffset = m_programInfo.type() == DxsoProgramTypes::VertexShader
-        ? samplerIdx + caps::MaxTexturesPS + 1
+        ? samplerIdx + FirstVSSamplerSlot
         : samplerIdx;
 
       uint32_t isNull = m_spec.get(m_module, m_specUbo, SpecSamplerNull, bitOffset, 1);
@@ -3482,6 +3491,7 @@ void DxsoCompiler::emitControlFlowGenericLoop(
     
     uint32_t floatType = m_module.defFloatType(32);
     uint32_t vec4Type  = m_module.defVectorType(floatType, 4);
+    uint32_t boolType  = m_module.defBoolType();
     
     // Declare uniform buffer containing clip planes
     uint32_t clipPlaneArray  = m_module.defArrayTypeUnique(vec4Type, clipPlaneCountId);
@@ -3536,6 +3546,9 @@ void DxsoCompiler::emitControlFlowGenericLoop(
     DxsoRegisterValue position;
     position.type = { DxsoScalarType::Float32, 4 };
     position.id = m_module.opLoad(vec4Type, positionPtr);
+
+    // Always consider clip planes enabled when doing GPL by forcing 6 for the quick value.
+    uint32_t clipPlaneCount = m_spec.get(m_module, m_specUbo, SpecClipPlaneCount, 0, 32, m_module.constu32(caps::MaxClipPlanes));
     
     for (uint32_t i = 0; i < caps::MaxClipPlanes; i++) {
       std::array<uint32_t, 2> blockMembers = {{
@@ -3551,9 +3564,13 @@ void DxsoCompiler::emitControlFlowGenericLoop(
 
       DxsoRegisterValue dist = emitDot(position, plane);
 
+      uint32_t clipPlaneEnabled = m_module.opULessThan(boolType, m_module.constu32(i), clipPlaneCount);
+
+      uint32_t value = m_module.opSelect(floatType, clipPlaneEnabled, dist.id, m_module.constf32(0.0f));
+
       m_module.opStore(m_module.opAccessChain(
         m_module.defPointerType(floatType, spv::StorageClassOutput),
-        clipDistArray, 1, &blockMembers[1]), dist.id);
+        clipDistArray, 1, &blockMembers[1]), value);
     }
   }
 
