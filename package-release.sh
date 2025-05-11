@@ -72,6 +72,13 @@ function build_arch {
         
  # -Dc_args="-include /usr/include/wine/wine/windows/d3d11on12.h -fno-pic -fno-pie -finline-functions -fomit-frame-pointer -fno-stack-protector -fno-math-errno -fno-trapping-math -fno-common -fgraphite-identity -floop-nest-optimize -ftree-loop-distribution -fno-semantic-interposition -fipa-pta -fno-plt -ffast-math -ffp-contract=fast -freciprocal-math -ffinite-math-only" \
   # -Dcpp_args="-include /usr/include/wine/wine/windows/d3d11on12.h -fno-pic -fno-pie -finline-functions -fomit-frame-pointer -fno-stack-protector -fno-math-errno -fno-trapping-math -fno-common -fgraphite-identity -floop-nest-optimize -ftree-loop-distribution -fno-semantic-interposition -fipa-pta -fno-plt -ffast-math -ffp-contract=fast -freciprocal-math -ffinite-math-only" \
+#-Dc_args="-fprofile-generate=E:\\ --coverage -fprofile-arcs -ftest-coverage -fno-pic -fno-pie -finline-functions -fomit-frame-pointer -fno-stack-protector -fno-math-errno -fno-trapping-math -fno-common -fgraphite-identity -floop-nest-optimize -ftree-loop-distribution -fno-semantic-interposition -fipa-pta -fno-plt -ffast-math -ffp-contract=fast -freciprocal-math -ffinite-math-only" \
+       # -Dc_link_args="/usr/lib/gcc/x86_64-w64-mingw32/13-win32/libgcov.a -flto=full -s -fdata-sections -ffunction-sections -Wl,--gc-sections" \
+      #  -Dcpp_args="-fprofile-generate=E:\\ --coverage -fprofile-arcs -ftest-coverage -fno-pic -fno-pie -finline-functions -fomit-frame-pointer -fno-stack-protector -fno-math-errno -fno-trapping-math -fno-common -fgraphite-identity -floop-nest-optimize -ftree-loop-distribution -fno-semantic-interposition -fipa-pta -fno-plt -ffast-math -ffp-contract=fast -freciprocal-math -ffinite-math-only" \
+       # -Dcpp_link_args="/usr/lib/gcc/x86_64-w64-mingw32/13-win32/libgcov.a -flto=full -s -fdata-sections -ffunction-sections -Wl,--gc-sections" \
+        #-Db_sanitize=none \
+
+
              
   #CC=llvm-mingw-20241203-msvcrt-ubuntu-20.04-x86_64/bin/x86_64-w64-mingw32-clang CXX=llvm-mingw-20241203-msvcrt-ubuntu-20.04-x86_64/bin/x86_64-w64-mingw32-clang++ 
   meson setup --cross-file "$DXVK_SRC_DIR/$crossfile$1.txt" \
@@ -80,12 +87,10 @@ function build_arch {
         $opt_strip                                          \
         --bindir "x$1"                                      \
         --libdir "x$1" \
-        -Db_pgo=off \
-        -Db_sanitize=none \
-        -Dc_args="-fprofile-generate=E:\\ --coverage -fprofile-arcs -ftest-coverage -fno-pic -fno-pie -finline-functions -fomit-frame-pointer -fno-stack-protector -fno-math-errno -fno-trapping-math -fno-common -fgraphite-identity -floop-nest-optimize -ftree-loop-distribution -fno-semantic-interposition -fipa-pta -fno-plt -ffast-math -ffp-contract=fast -freciprocal-math -ffinite-math-only" \
-        -Dc_link_args="/usr/lib/gcc/x86_64-w64-mingw32/13-win32/libgcov.a -flto=full -s -fdata-sections -ffunction-sections -Wl,--gc-sections" \
-        -Dcpp_args="-fprofile-generate=E:\\ --coverage -fprofile-arcs -ftest-coverage -fno-pic -fno-pie -finline-functions -fomit-frame-pointer -fno-stack-protector -fno-math-errno -fno-trapping-math -fno-common -fgraphite-identity -floop-nest-optimize -ftree-loop-distribution -fno-semantic-interposition -fipa-pta -fno-plt -ffast-math -ffp-contract=fast -freciprocal-math -ffinite-math-only" \
-        -Dcpp_link_args="/usr/lib/gcc/x86_64-w64-mingw32/13-win32/libgcov.a -flto=full -s -fdata-sections -ffunction-sections -Wl,--gc-sections" \
+        -Dc_args="-fprofile-generate=./ --coverage -fprofile-arcs -ftest-coverage" \
+        -Dc_link_args="/usr/lib/gcc/x86_64-w64-mingw32/13-win32/libgcov.a" \
+        -Dcpp_args="-fprofile-generate=./ --coverage -fprofile-arcs -ftest-coverage" \
+        -Dcpp_link_args="/usr/lib/gcc/x86_64-w64-mingw32/13-win32/libgcov.a" \
         -Db_ndebug=if-release                               \
         -Dbuild_id=$opt_buildid                             \
         "$DXVK_BUILD_DIR/build.$1"
